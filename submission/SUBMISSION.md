@@ -1,12 +1,21 @@
 # THE GAUNTLET — Submission
 
 **Survive a boss-battle of AI VCs and earn your term sheet.** A Gemini-powered
-fundraising flight simulator: type your one-line startup idea, fight three AI
-investor bosses (Market · Tech · GTM), and walk away with a shareable fundability
-verdict. Built for the GDG Stanford × Red Bull Basement hackathon.
+fundraising flight simulator: drop in your **company website URL**, **upload your
+pitch deck (PDF)**, or type a one-line idea — Gemini reads it and builds a real
+company dossier, three AI investor bosses (Market · Tech · GTM) grill you on
+**your actual business**, and a win unlocks a **$5M raise flow** with matched
+investors and ready-to-send warm intros. Built for the GDG Stanford × Red Bull
+Basement hackathon.
+
+**The flow:** URL / PDF / idea intake → Gemini company analysis → dossier review
+→ grounded boss battle → **$5M investor-match raise** (win) or rejection card (lose).
 
 - **GitHub (public):** https://github.com/utopusc/the-gauntlet
-- **Engine:** `@google/genai`, model `gemini-2.5-flash` (structured `responseSchema` JSON output; swappable in `constants.ts`)
+- **Engine:** `@google/genai`, model `gemini-2.5-flash` (swappable in `constants.ts`)
+- **Website analysis:** Gemini's native **URL context** tool — **no Firecrawl, no
+  backend, no crawler**. Pure-client; runs unchanged in AI Studio. (PDF intake
+  uses `inlineData`; idea/PDF/judging paths use structured `responseSchema` JSON.)
 - **Stack:** Vite + React 18 + TypeScript · Tailwind (CDN) · Framer Motion
 
 ---
@@ -25,8 +34,14 @@ so the same code runs locally and in AI Studio unchanged.
    `constants.ts`, `prompts.ts`, `types.ts`, `vite.config.ts`).
 3. **Set the key:** ensure a valid **`GEMINI_API_KEY`** is configured in the
    AI Studio environment (Studio maps it into `process.env.API_KEY` for you).
-4. **Run.** Type a one-line startup idea → **ENTER FIGHT** → battle the three bosses.
+4. **Run.** Paste your **company URL** (or upload a **pitch PDF**, or type an idea)
+   → Gemini analyzes it → review the dossier → **ENTER THE ARENA** → battle the
+   three bosses → win to reach the **$5M raise** screen with matched investors.
 
+> Website analysis uses Gemini's native **URL context** tool — there is **no
+> backend, scraper, or Firecrawl dependency** to configure. Everything runs in the
+> browser against the Gemini API.
+>
 > If you see "great idea!"-style fluff or no questions, the key isn't wired —
 > recheck step 3. The bosses are deliberately brutal; that's the product.
 
@@ -53,9 +68,9 @@ npm run dev          # dev server, typically http://localhost:5173
 
 Production: `npm run build` → output in `dist/`; preview with `npm run preview`.
 
-**Build status:** ✅ Green. `npm install` (115 pkgs, 0 vulnerabilities) and
-`npm run build` (vite/rollup, 405 modules) both exit 0. The only output is an
-advisory >500 kB chunk note — not an error.
+**Build status:** ✅ Green. `npm install` and `npm run build` (vite v6.4.2,
+408 modules) both exit 0. The only output is an advisory >500 kB chunk note
+(gzip 162 kB) — a code-splitting suggestion, not an error.
 
 ---
 
@@ -91,9 +106,13 @@ Full post variants, LinkedIn copy, and guardrails in [`SHARE-COPY.md`](./SHARE-C
 ## 🧠 Why it wins
 
 Most "AI pitch coach" demos are one chat box that says "great idea!" The Gauntlet
-ships **three distinct adversaries** mapped to how funds actually diligence —
-market (TAM/why-now/moat), tech (feasibility/data advantage), GTM
-(distribution/CAC-LTV) — with real game feel (animated HP bars, damage numbers,
-Framer Motion) and a built-in viral loop (every play ends in a postable verdict card).
+**reads your real company** — paste a URL or drop your pitch deck and Gemini builds
+an actual dossier — then ships **three distinct adversaries** mapped to how funds
+actually diligence: market (TAM/why-now/moat), tech (feasibility/data advantage),
+GTM (distribution/CAC-LTV). Every question is **grounded on your extracted profile**,
+not generic. Win and you don't just get a score — you reach a **$5M raise flow**
+with matched investors and warm-intro emails you could actually send. Real game
+feel (animated HP bars, damage numbers, Framer Motion) and a built-in viral loop
+(every play ends in a postable verdict card).
 
 *Built for the Gauntlet. Now go raise.*
