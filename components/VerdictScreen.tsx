@@ -9,8 +9,20 @@ interface VerdictScreenProps {
   game: GameApi;
 }
 
+/**
+ * The LOSE / rejection card. A win now routes to RaiseScreen instead — this
+ * screen only ever shows when the founder's credibility hit zero (outcome 'passed').
+ */
 export const VerdictScreen: React.FC<VerdictScreenProps> = ({ game }) => {
-  const { verdict, idea, reset } = game;
+  const { verdict, companyProfile, reset } = game;
+
+  // The "pitch" the share card prints: prefer the extracted tagline, then the
+  // company name, then whatever idea text the founder typed at intake.
+  const pitch =
+    companyProfile?.tagline?.trim() ||
+    companyProfile?.name?.trim() ||
+    game.companyInput?.idea?.trim() ||
+    'A startup that entered the arena.';
 
   // Defensive: if we somehow land here without a verdict, offer a way out.
   if (!verdict) {
@@ -24,8 +36,7 @@ export const VerdictScreen: React.FC<VerdictScreenProps> = ({ game }) => {
     );
   }
 
-  const funded = verdict.outcome === 'funded';
-  const shareText = buildShareText(verdict, idea);
+  const shareText = buildShareText(verdict, pitch);
 
   return (
     <div className="relative flex min-h-screen w-full flex-col items-center justify-center gap-8 px-4 py-12 sm:py-16">
@@ -36,25 +47,19 @@ export const VerdictScreen: React.FC<VerdictScreenProps> = ({ game }) => {
         transition={{ duration: 0.5 }}
         className="text-center"
       >
-        <div
-          className={`text-xs font-bold tracking-[0.4em] ${
-            funded ? 'text-cyan-300' : 'text-rose-300'
-          }`}
-        >
-          {funded ? 'YOU SURVIVED' : 'YOU GOT REJECTED'}
+        <div className="text-xs font-bold tracking-[0.4em] text-rose-300">
+          YOU GOT REJECTED
         </div>
         <h1 className="mt-2 text-4xl font-black tracking-tight text-white sm:text-5xl">
-          {funded ? 'The Verdict Is In' : 'The Panel Has Passed'}
+          The Panel Has Passed
         </h1>
         <p className="mt-2 text-sm text-slate-400">
-          {funded
-            ? 'Three AI VCs grilled you. Here is your term sheet.'
-            : 'Your credibility ran out. Here is the post-mortem.'}
+          Your credibility ran out before you cleared the room. Here is the post-mortem.
         </p>
       </motion.div>
 
       {/* the shareable hero card */}
-      <ShareCard verdict={verdict} idea={idea} />
+      <ShareCard verdict={verdict} idea={pitch} />
 
       {/* actions */}
       <motion.div
@@ -88,10 +93,10 @@ export const VerdictScreen: React.FC<VerdictScreenProps> = ({ game }) => {
           className="w-full"
           onClick={reset}
         >
-          ⚔️ Play Again
+          ⚔️ Run It Back
         </Button>
         <p className="mt-1 text-center text-xs text-slate-500">
-          Screenshot the card above and post it. Tag a founder who can't survive.
+          Sharpen the deck, fix the red flags, and re-enter the Gauntlet.
         </p>
       </motion.div>
     </div>

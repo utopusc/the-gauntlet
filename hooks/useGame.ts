@@ -1,35 +1,58 @@
-// THE GAUNTLET — game state machine (W2)
-// Returns the full GameApi. Drives: landing -> arena -> win | lose.
+// THE GAUNTLET — game state machine (LOGIC layer)
+// Returns the full GameApi. Drives:
+//   onboard -> analyzing -> profile -> arena -> win | lose
 import { useCallback, useRef, useState } from 'react';
 import { BOSSES, FOUNDER_MAX_HP, MAX_ROUNDS_PER_BOSS } from '../constants';
 import {
+  analyzeCompany,
   generateBossQuestion,
   judgeAnswer,
   generateVerdict,
+  matchInvestors,
 } from '../services/geminiService';
-import type { BossState, GameApi, GamePhase, JudgeResult, Verdict } from '../types';
+import type {
+  BossState,
+  CompanyInput,
+  CompanyProfile,
+  GameApi,
+  GamePhase,
+  InvestorMatch,
+  JudgeResult,
+  Verdict,
+} from '../types';
 
 const freshBosses = (): BossState[] =>
   BOSSES.map((b) => ({ ...b, hp: b.maxHp, defeated: false }));
 
 export function useGame(): GameApi {
-  const [phase, setPhase] = useState<GamePhase>('landing');
-  const [idea, setIdea] = useState('');
+  const [phase, setPhase] = useState<GamePhase>('onboard');
+
+  // intake + analysis
+  const [companyInput, setCompanyInput] = useState<CompanyInput | null>(null);
+  const [companyProfile, setCompanyProfile] = useState<CompanyProfile | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+
+  // raise flow
+  const [investors, setInvestors] = useState<InvestorMatch[]>([]);
+  const [matching, setMatching] = useState(false);
+
+  // arena
   const [bosses, setBosses] = useState<BossState[]>(freshBosses);
   const [currentBossIndex, setCurrentBossIndex] = useState(0);
   const [founderHp, setFounderHp] = useState(FOUNDER_MAX_HP);
   const [question, setQuestion] = useState('');
   const [lastResult, setLastResult] = useState<JudgeResult | null>(null);
+
+  // shared
   const [verdict, setVerdict] = useState<Verdict | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Refs for values we read inside async flows where we want the freshest value
-  // without re-binding the callback on every render.
+  // Refs we read inside async flows for the freshest value without re-binding.
   const roundRef = useRef(0); // rounds spent on the current boss
   const askedRef = useRef<string[]>([]); // questions asked to the current boss (avoid repeats)
   const transcriptRef = useRef(''); // full Q/A/J transcript for the verdict
-  const ideaRef = useRef('');
+  const profileRef = useRef<CompanyProfile | null>(null); // freshest profile for async grounding
 
   const currentBoss = bosses[currentBossIndex] ?? null;
 
@@ -37,78 +60,126 @@ export function useGame(): GameApi {
     transcriptRef.current += (transcriptRef.current ? '\n' : '') + line;
   };
 
-  // Fetch and set the next question for a given boss.
-  const askNextQuestion = useCallback(
-    async (boss: BossState) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const q = await generateBossQuestion(ideaRef.current, boss, askedRef.current);
-        askedRef.current = [...askedRef.current, q];
-        appendTranscript(`[${boss.name} — ${boss.title}] Q: ${q}`);
-        setQuestion(q);
-      } catch (err) {
-        console.error('[gauntlet] askNextQuestion failed:', err);
-        setError('The investor lost their train of thought. Try again.');
-      } finally {
-        setLoading(false);
-      }
-    },
-    [],
-  );
+  // ---- analysis ----------------------------------------------------------
 
+  const analyze = useCallback(async (input: CompanyInput) => {
+    setCompanyInput(input);
+    setAnalyzing(true);
+    setError(null);
+    setPhase('analyzing');
+    try {
+      // analyzeCompany never throws — it returns a minimal profile on failure.
+      const profile = await analyzeCompany(input);
+      profileRef.current = profile;
+      setCompanyProfile(profile);
+      setPhase('profile');
+    } catch (err) {
+      // Defensive: should not happen, but never strand the founder on a spinner.
+      console.error('[gauntlet] analyze failed:', err);
+      const minimal = await analyzeCompany({ idea: input.idea, pdfName: input.pdfName });
+      profileRef.current = minimal;
+      setCompanyProfile(minimal);
+      setError('We could not fully read your sources — proceeding on a partial profile.');
+      setPhase('profile');
+    } finally {
+      setAnalyzing(false);
+    }
+  }, []);
+
+  // ---- arena -------------------------------------------------------------
+
+  // Fetch and set the next question for a given boss (grounded on the profile).
+  const askNextQuestion = useCallback(async (boss: BossState) => {
+    const profile = profileRef.current;
+    if (!profile) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const q = await generateBossQuestion(profile, boss, askedRef.current);
+      askedRef.current = [...askedRef.current, q];
+      appendTranscript(`[${boss.name} — ${boss.title}] Q: ${q}`);
+      setQuestion(q);
+    } catch (err) {
+      console.error('[gauntlet] askNextQuestion failed:', err);
+      setError('The investor lost their train of thought. Try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const enterArena = useCallback(() => {
+    const profile = profileRef.current;
+    if (!profile) return;
+    const startBosses = freshBosses();
+    roundRef.current = 0;
+    askedRef.current = [];
+    transcriptRef.current = `Company: ${profile.name} — ${profile.tagline}`;
+    setBosses(startBosses);
+    setCurrentBossIndex(0);
+    setFounderHp(FOUNDER_MAX_HP);
+    setQuestion('');
+    setLastResult(null);
+    setVerdict(null);
+    setInvestors([]);
+    setError(null);
+    setPhase('arena');
+    void askNextQuestion(startBosses[0]);
+  }, [askNextQuestion]);
+
+  // Convenience: analyze from a bare idea then drop into the profile screen.
   const start = useCallback(
-    (rawIdea: string) => {
-      const trimmed = rawIdea.trim();
+    (idea: string) => {
+      const trimmed = idea.trim();
       if (!trimmed) return;
-      // Reset everything for a clean run.
-      const startBosses = freshBosses();
-      ideaRef.current = trimmed;
-      roundRef.current = 0;
-      askedRef.current = [];
-      transcriptRef.current = `Startup idea: "${trimmed}"`;
-      setIdea(trimmed);
-      setBosses(startBosses);
-      setCurrentBossIndex(0);
-      setFounderHp(FOUNDER_MAX_HP);
-      setQuestion('');
-      setLastResult(null);
-      setVerdict(null);
-      setError(null);
-      setPhase('arena');
-      void askNextQuestion(startBosses[0]);
+      void analyze({ idea: trimmed });
     },
-    [askNextQuestion],
+    [analyze],
   );
 
-  const finish = useCallback(
-    async (outcome: 'funded' | 'passed') => {
-      setLoading(true);
-      setError(null);
-      try {
-        const v = await generateVerdict(ideaRef.current, transcriptRef.current, outcome);
-        setVerdict(v);
-      } catch (err) {
-        console.error('[gauntlet] finish/verdict failed:', err);
-        setError('Could not reach the partners — showing a provisional verdict.');
-      } finally {
-        setLoading(false);
-        setPhase(outcome === 'funded' ? 'win' : 'lose');
+  // ---- finish: verdict (+ raise matching on a win) -----------------------
+
+  const finish = useCallback(async (outcome: 'funded' | 'passed') => {
+    const profile = profileRef.current;
+    setLoading(true);
+    setError(null);
+    try {
+      const v = profile
+        ? await generateVerdict(profile, transcriptRef.current, outcome)
+        : null;
+      setVerdict(v);
+
+      if (outcome === 'funded' && profile && v) {
+        // Win -> raise flow: generate the matched investor shortlist.
+        setMatching(true);
+        try {
+          const matches = await matchInvestors(profile, v);
+          setInvestors(matches);
+        } catch (matchErr) {
+          console.error('[gauntlet] matchInvestors failed:', matchErr);
+        } finally {
+          setMatching(false);
+        }
       }
-    },
-    [],
-  );
+    } catch (err) {
+      console.error('[gauntlet] finish/verdict failed:', err);
+      setError('Could not reach the partners — showing a provisional verdict.');
+    } finally {
+      setLoading(false);
+      setPhase(outcome === 'funded' ? 'win' : 'lose');
+    }
+  }, []);
 
   const submitAnswer = useCallback(
     async (answer: string) => {
       const trimmed = answer.trim();
       const boss = bosses[currentBossIndex];
-      if (!trimmed || !boss || loading) return;
+      const profile = profileRef.current;
+      if (!trimmed || !boss || !profile || loading) return;
 
       setLoading(true);
       setError(null);
       try {
-        const result = await judgeAnswer(ideaRef.current, boss, question, trimmed);
+        const result = await judgeAnswer(profile, boss, question, trimmed);
         setLastResult(result);
         appendTranscript(`A: ${trimmed}`);
         appendTranscript(
@@ -171,13 +242,19 @@ export function useGame(): GameApi {
     [bosses, currentBossIndex, founderHp, question, loading, askNextQuestion, finish],
   );
 
+  // ---- reset -------------------------------------------------------------
+
   const reset = useCallback(() => {
-    ideaRef.current = '';
     roundRef.current = 0;
     askedRef.current = [];
     transcriptRef.current = '';
-    setPhase('landing');
-    setIdea('');
+    profileRef.current = null;
+    setPhase('onboard');
+    setCompanyInput(null);
+    setCompanyProfile(null);
+    setAnalyzing(false);
+    setInvestors([]);
+    setMatching(false);
     setBosses(freshBosses());
     setCurrentBossIndex(0);
     setFounderHp(FOUNDER_MAX_HP);
@@ -190,7 +267,11 @@ export function useGame(): GameApi {
 
   return {
     phase,
-    idea,
+    companyInput,
+    companyProfile,
+    analyzing,
+    investors,
+    matching,
     bosses,
     currentBossIndex,
     currentBoss,
@@ -200,8 +281,10 @@ export function useGame(): GameApi {
     loading,
     error,
     verdict,
-    start,
+    analyze,
+    enterArena,
     submitAnswer,
     reset,
+    start,
   };
 }

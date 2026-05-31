@@ -46,6 +46,7 @@ function QuestionBlock({ question, loading }: { question: string; loading: boole
 export function Arena({ game }: ArenaProps) {
   const boss = game.currentBoss;
   const result = game.lastResult;
+  const profile = game.companyProfile;
 
   if (!boss) {
     return (
@@ -57,13 +58,28 @@ export function Arena({ game }: ArenaProps) {
 
   const ratingMeta = result ? RATING_META[result.rating] ?? RATING_META.solid : null;
 
+  // What grounds the fight: the site if we read one, else the uploaded deck, else the idea.
+  const groundedSource = game.companyInput?.url
+    ? 'your site'
+    : game.companyInput?.pdfName
+      ? 'your deck'
+      : 'your pitch';
+
   return (
     <div className="flex flex-1 flex-col gap-5">
-      {/* Top bar: idea + progress dots */}
+      {/* Top bar: company + grounding chip + progress dots */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/35">Your pitch</p>
-          <p className="max-w-md truncate text-sm font-medium text-white/70">{game.idea}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/35">Now defending</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="max-w-md truncate text-sm font-bold text-white">
+              {profile?.name || 'Your company'}
+            </p>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-0.5 text-[10px] font-semibold text-cyan-200">
+              <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
+              grounded on {groundedSource}
+            </span>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {game.bosses.map((b, i) => {

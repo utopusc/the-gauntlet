@@ -61,3 +61,34 @@ export const BOSSES: Boss[] = [
       'You want the first 100 customers, the channel, and the unit economics — not a brand vision.',
   },
 ];
+
+/**
+ * The real funds + partners attending GDG Stanford x Red Bull Basement.
+ * matchInvestors() picks the 3 best-fit from this shortlist and writes a warm
+ * intro for each. Each `thesis` is a tight 4-8 word fit signal used for matching.
+ */
+export interface EventInvestor {
+  fund: string;
+  partner: string;
+  thesis: string;
+}
+
+export const EVENT_INVESTORS: EventInvestor[] = [
+  { fund: 'Mayfield', partner: 'Ursheet Parikh', thesis: 'AI-native infrastructure and enterprise seed bets' },
+  { fund: 'Pear VC', partner: 'Andrew Parambath', thesis: 'pre-seed founders with deep technical edge' },
+  { fund: 'Susa Ventures', partner: "Derick En'Wezoh", thesis: 'data network effects and defensible moats' },
+  { fund: 'DTCP', partner: 'Lena Stocker', thesis: 'enterprise SaaS and digital infrastructure growth' },
+  { fund: 'Cota Capital', partner: 'Vikram Venkat', thesis: 'modern enterprise and deep-tech transformation' },
+  { fund: 'Mighty Capital', partner: 'Kevin Bernal', thesis: 'product-led B2B software at scale' },
+  { fund: 'Giant Ventures', partner: 'Zenetta Burger', thesis: 'purpose-driven climate, health, and inclusion startups' },
+  { fund: 'Bay Angels', partner: 'Neda Emami', thesis: 'early angel checks for bold first-time founders' },
+  { fund: 'J2 Ventures', partner: 'Matt Goldman', thesis: 'dual-use frontier tech and national security' },
+  { fund: 'Exponential Ventures', partner: 'Magne Jul Pedersen', thesis: 'exponential automation and AI-driven productivity' },
+  { fund: 'INCE Capital', partner: 'Zhen Xia', thesis: 'global consumer and cross-border tech platforms' },
+  { fund: 'AB Plus Ventures', partner: 'Anitha Vadavatha', thesis: 'early-stage SaaS and emerging-market founders' },
+  { fund: 'Flourish Ventures', partner: 'Philippe Mallette', thesis: 'fintech and financial-health innovation' },
+  { fund: 'Costanoa', partner: 'Nicole Seah', thesis: 'applied AI and data-driven B2B tools' },
+  { fund: 'F-Prime', partner: 'Benjamin Gorman', thesis: 'healthtech, fintech, and deep-tech category leaders' },
+  { fund: 'Llama Ventures', partner: 'Herman Zhou', thesis: 'AI-first products and generative tooling' },
+  { fund: 'M12 (Microsoft)', partner: 'Tracy Liu', thesis: 'enterprise AI, infra, and developer platforms' },
+];

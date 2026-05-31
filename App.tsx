@@ -1,8 +1,10 @@
 import React from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useGame } from './hooks/useGame';
-import { LandingScreen } from './components/LandingScreen';
+import { OnboardScreen } from './components/OnboardScreen';
+import { ProfileScreen } from './components/ProfileScreen';
 import { Arena } from './components/Arena';
+import { RaiseScreen } from './components/RaiseScreen';
 import { VerdictScreen } from './components/VerdictScreen';
 
 const phaseTransition = {
@@ -44,12 +46,22 @@ export default function App() {
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-[#05060d]" />
       </div>
 
-      {/* Phase router */}
+      {/* Phase router
+          onboard / analyzing -> OnboardScreen (intake + "reading your site & deck" loader)
+          profile             -> ProfileScreen (extracted dossier)
+          arena               -> Arena (grounded boss fight)
+          win                 -> RaiseScreen ($5M raise + matched investors)
+          lose                -> VerdictScreen (rejection post-mortem) */}
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-6 sm:px-6 sm:py-10">
         <AnimatePresence mode="wait">
-          {game.phase === 'landing' && (
-            <motion.div key="landing" {...phaseTransition} className="flex flex-1 flex-col">
-              <LandingScreen game={game} />
+          {(game.phase === 'onboard' || game.phase === 'analyzing') && (
+            <motion.div key="onboard" {...phaseTransition} className="flex flex-1 flex-col">
+              <OnboardScreen game={game} />
+            </motion.div>
+          )}
+          {game.phase === 'profile' && (
+            <motion.div key="profile" {...phaseTransition} className="flex flex-1 flex-col">
+              <ProfileScreen game={game} />
             </motion.div>
           )}
           {game.phase === 'arena' && (
@@ -57,7 +69,12 @@ export default function App() {
               <Arena game={game} />
             </motion.div>
           )}
-          {(game.phase === 'win' || game.phase === 'lose') && (
+          {game.phase === 'win' && (
+            <motion.div key="raise" {...phaseTransition} className="flex flex-1 flex-col">
+              <RaiseScreen game={game} />
+            </motion.div>
+          )}
+          {game.phase === 'lose' && (
             <motion.div key="verdict" {...phaseTransition} className="flex flex-1 flex-col">
               <VerdictScreen game={game} />
             </motion.div>
