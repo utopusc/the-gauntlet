@@ -2,8 +2,60 @@
 // Analysis + per-boss + judge + verdict + investor-match prompts.
 // Everything is grounded on the extracted CompanyProfile so the battle references
 // the founder's REAL claims, traction, and red flags — not generic VC noise.
-import type { Boss, CompanyProfile, Verdict } from './types';
+import type { Boss, CompanyProfile, ModeConfig, Verdict } from './types';
 import type { EventInvestor } from './constants';
+
+// ---- mode injection -------------------------------------------------------
+
+/**
+ * The MODE block injected at the top of every battle prompt. It carries the
+ * active mode's `vibe` (question style + tone) so the model adapts FUN / NORMAL /
+ * EXPERT behavior. Returns '' if no mode is provided (safe back-compat — the
+ * prompt then reads exactly as the original NORMAL behavior).
+ */
+function modeBlock(mode?: ModeConfig): string {
+  if (!mode) return '';
+  return [
+    '',
+    `=== MODE: ${mode.label} ===`,
+    mode.vibe,
+    '',
+  ].join('\n');
+}
+
+/**
+ * Concrete, strictness-aware scoring guidance for the JUDGE prompt. Shifts the
+ * damage/selfDamage bands and critique tone by mode without changing the schema.
+ */
+function strictnessGuidance(mode?: ModeConfig): string {
+  switch (mode?.strictness) {
+    case 'lenient':
+      return [
+        'SCORING STYLE — LENIENT (FUN mode): be generous. Reward boldness, humor, and energy.',
+        '- damage (0-100): a fun, committed, or clever answer = 55-100. Even a so-so answer that plays along = 35-60. Only a total non-answer = under 25.',
+        '- selfDamage (0-40): keep it LOW. A confident answer = 0-3. Only a genuine faceplant = 10-20. Never above 20.',
+        '- critique: 1-2 sentences, FUNNY and kind. Playful roast energy, never harsh. Celebrate the chaos.',
+        '- rating: lean toward "solid"/"killer". Reserve "weak" for total dodges.',
+      ].join('\n');
+    case 'harsh':
+      return [
+        'SCORING STYLE — HARSH (EXPERT mode): be stingy and ruthless. Only rigor earns reward.',
+        '- damage (0-100): only a genuinely rigorous, specific, evidence-backed answer = 45-90. A solid-but-incomplete answer = 18-38. Any hand-waving or buzzwords = 0-15.',
+        '- selfDamage (0-40): punish gaps hard. A flawless answer = 0-6. A vague, evasive, or contradictory answer = 22-40.',
+        '- critique: 1-2 sentences, surgical and unforgiving. Name the exact failure of logic, math, or defensibility. No comfort.',
+        '- rating: "killer" ONLY for genuinely elite answers; "weak" for anything that dodges the technical core.',
+      ].join('\n');
+    case 'fair':
+    default:
+      return [
+        'SCORING STYLE — FAIR (NORMAL mode): balanced and honest.',
+        '- damage (0-100): a killer, specific, evidence-backed answer = 60-100. A solid-but-incomplete answer = 30-55. Vague, evasive, or buzzword answer = 0-25.',
+        '- selfDamage (0-40): a confident sharp answer = 0-5. A hand-wavy or contradictory answer = 15-40. Do not punish a good answer.',
+        '- critique: 1-2 sentences. Sharp, specific, true. Name the actual gap or praise the actual insight.',
+        '- rating: "killer" if genuinely impressed, "solid" if respectable, "weak" if it dodged or fluffed.',
+      ].join('\n');
+  }
+}
 
 // ---- analysis -------------------------------------------------------------
 
@@ -80,18 +132,17 @@ function profileContext(p: CompanyProfile): string {
  * System instruction for generating a boss's brutal, COMPANY-specific question.
  * The model returns JSON { question: string } (1-2 sentences).
  */
-export function bossQuestionSystem(boss: Boss): string {
+export function bossQuestionSystem(boss: Boss, mode?: ModeConfig): string {
   return [
     `You are ${boss.name}, ${boss.title} — a ${boss.fund} investor in a high-stakes pitch battle called THE GAUNTLET.`,
     `PERSONA: ${boss.persona}`,
     `YOUR OBSESSION: ${boss.focus}.`,
-    '',
-    'You will be given a real, researched dossier of the founder\'s company. Ask ONE brutal, SPECIFIC question that targets the single weakest point of THIS exact company through your lens.',
+    modeBlock(mode),
+    'You will be given a real, researched dossier of the founder\'s company. Ask ONE question that targets the single weakest point of THIS exact company through your lens, in the STYLE AND TONE of the MODE above.',
     'Rules:',
     '- 1-2 sentences. No preamble, no greeting, no "great question". Just the question.',
     '- Reference a CONCRETE detail from the dossier — a stated claim, a number, a red flag, the actual market or buyer. Make the founder feel you read their deck.',
-    '- Be a real, sharp VC objection a founder would actually fear — not a joke, not generic.',
-    '- Confident, fun, a little intimidating. You are the smartest person in the room and you know it.',
+    '- Match the MODE: it dictates whether you are brutally technical, fairly sharp, or wildly absurd. Honor it.',
     '- Never repeat a question already asked this session.',
   ].join('\n');
 }
@@ -109,22 +160,19 @@ export function bossQuestionUser(profile: CompanyProfile, askedSoFar: string[]):
  * System instruction for judging a founder's answer, grounded on the company.
  * Returns JSON { damage, selfDamage, critique, rating, followUp }.
  */
-export function judgeSystem(boss: Boss): string {
+export function judgeSystem(boss: Boss, mode?: ModeConfig): string {
   return [
     `You are ${boss.name}, ${boss.title} (${boss.fund}). PERSONA: ${boss.persona}`,
     `You care above all about: ${boss.focus}.`,
-    '',
-    'You have the founder\'s real company dossier and you asked them a hard question. Now JUDGE their answer like a real VC deciding whether to lean in or pass.',
+    modeBlock(mode),
+    'You have the founder\'s real company dossier and you asked them a question. Now JUDGE their answer in the STYLE AND TONE of the MODE above.',
     'Weigh the answer AGAINST the dossier: reward answers that resolve a stated red flag or back a claim with the real traction; punish answers that contradict the dossier or hand-wave.',
     '',
-    'Scoring:',
-    '- damage (0-100): how much the answer reduced YOUR skepticism. A killer, specific, evidence-backed answer = 60-100. A solid-but-incomplete answer = 30-55. Vague, evasive, or buzzword answer = 0-25.',
-    '- selfDamage (0-40): how much the answer HURT the founder\'s credibility. A confident sharp answer = 0-5. A hand-wavy or contradictory answer = 15-40. Be fair: do not punish a good answer.',
-    '- rating: "killer" if it genuinely impressed you, "solid" if respectable, "weak" if it dodged or fluffed.',
-    '- critique: 1-2 sentences. Sharp, specific, true. Name the actual gap or praise the actual insight. Reference the company. No generic filler.',
-    '- followUp: 1 sentence. A pointed next question that presses on the remaining weakness. Raise the stakes.',
+    strictnessGuidance(mode),
+    '- critique: follow the critique guidance for this mode. Reference the company. No generic filler.',
+    '- followUp: 1 sentence. A pointed next question that presses on the remaining weakness, in this mode\'s tone. Raise the stakes.',
     '',
-    'Tone: confident, fun, ruthless but fair. You reward real substance and punish fluff. Never just cracking jokes — every word is a real fundraising objection.',
+    'Stay in character for the MODE above at all times — comedic and generous in FUN, balanced in NORMAL, surgical and stingy in EXPERT.',
   ].join('\n');
 }
 
@@ -147,7 +195,7 @@ export function judgeUser(
  * System instruction for the final verdict / Term Sheet, grounded on the company.
  * Returns JSON { score, oneLiner, investorQuote, strengths[], risks[], outcome }.
  */
-export function verdictSystem(outcome: 'funded' | 'passed'): string {
+export function verdictSystem(outcome: 'funded' | 'passed', mode?: ModeConfig): string {
   const frame =
     outcome === 'funded'
       ? 'The founder SURVIVED all three investors. This is a TERM SHEET — they earned a real look. Be earned-positive: credible, specific, still honest about risk.'
@@ -155,17 +203,18 @@ export function verdictSystem(outcome: 'funded' | 'passed'): string {
   return [
     'You are the managing partner writing the final verdict after THE GAUNTLET — a three-investor pitch battle.',
     frame,
-    '',
+    modeBlock(mode),
+    'Write the verdict in the STYLE AND TONE of the MODE above (playful and generous in FUN, balanced in NORMAL, exacting in EXPERT).',
     'You have the company dossier and the full transcript. Ground every line in the REAL company.',
     'Return:',
-    '- score (0-100): brutally honest fundability. Funded outcomes usually 55-92; passed outcomes usually 8-48. Calibrate to the actual transcript and dossier, not the outcome label.',
+    '- score (0-100): honest fundability calibrated to BOTH the transcript and the mode. Funded outcomes usually 55-92; passed outcomes usually 8-48. FUN mode skews more generous; EXPERT mode skews more brutal.',
     '- oneLiner: a punchy 1-sentence headline verdict on the company.',
     '- investorQuote: a quotable, sharable 1-2 sentence line in the partner\'s voice — the thing you\'d say in the partner meeting.',
     '- strengths: 2-3 short bullet phrases (real, specific to this company).',
     '- risks: 2-3 short bullet phrases (the things that could kill it).',
     `- outcome: "${outcome}".`,
     '',
-    'Voice: a top-tier VC. Confident, memorable, fun, never cruel. Specific to THIS company and THIS transcript.',
+    'Voice: a top-tier VC, adapted to the MODE. Specific to THIS company and THIS transcript.',
   ].join('\n');
 }
 

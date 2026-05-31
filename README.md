@@ -20,6 +20,26 @@ It plays like a boss-rush video game. It feels like a real pitch meeting.
 
 ---
 
+## 🕹️ Retro arcade reskin + 3 difficulty modes
+
+The whole experience is wrapped in a **pixel-retro arcade aesthetic** — a CRT
+scanline/flicker/vignette overlay (pointer-events: none, never blocks clicks), a
+readable `VT323` retro body font with `Press Start 2P` reserved for arcade buttons,
+segmented HP bars, neon accents, and crunchy **SFX** with a persistent mute toggle.
+
+Pick your fight at **three difficulty modes** — the accent color, copy, and boss
+brutality shift per mode:
+
+- **Fun** — gentler bosses, forgiving scoring. A warm-up lap.
+- **Normal** — the real pitch drill, balanced damage.
+- **Expert** — relentless follow-ups, punishing scoring. Term sheets are earned.
+
+Mode drives `data-mode` on the shell (→ `--accent`), wired through `types.ts`
+(`GameApi.mode` / `setMode`), `useGame.ts`, and `constants.ts` (`MODES` /
+`DEFAULT_MODE` / `getMode()`).
+
+---
+
 ## 🧠 The moat
 
 Most "AI pitch coach" demos are a single chat box that says "great idea!" The Gauntlet is

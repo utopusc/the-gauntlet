@@ -17,6 +17,11 @@ Basement hackathon.
   backend, no crawler**. Pure-client; runs unchanged in AI Studio. (PDF intake
   uses `inlineData`; idea/PDF/judging paths use structured `responseSchema` JSON.)
 - **Stack:** Vite + React 18 + TypeScript · Tailwind (CDN) · Framer Motion
+- **Look & feel:** Pixel-retro **arcade reskin** — CRT scanline overlay (never
+  blocks clicks), `VT323` body font + `Press Start 2P` arcade buttons, segmented
+  HP bars, neon accents, and SFX with a persistent mute toggle.
+- **Difficulty:** Three modes — **Fun · Normal · Expert** — that shift the accent
+  color, copy, and boss brutality (mode drives `data-mode` → `--accent`).
 
 ---
 

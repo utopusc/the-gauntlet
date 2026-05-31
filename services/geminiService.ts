@@ -20,6 +20,7 @@ import type {
   CompanyProfile,
   InvestorMatch,
   JudgeResult,
+  ModeConfig,
   Verdict,
 } from '../types';
 import {
@@ -232,13 +233,14 @@ export async function generateBossQuestion(
   profile: CompanyProfile,
   boss: Boss,
   askedSoFar: string[],
+  mode?: ModeConfig,
 ): Promise<string> {
   try {
     const res = await ai.models.generateContent({
       model: MODEL,
       contents: bossQuestionUser(profile, askedSoFar),
       config: {
-        systemInstruction: bossQuestionSystem(boss),
+        systemInstruction: bossQuestionSystem(boss, mode),
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -271,13 +273,14 @@ export async function judgeAnswer(
   boss: Boss,
   question: string,
   answer: string,
+  mode?: ModeConfig,
 ): Promise<JudgeResult> {
   try {
     const res = await ai.models.generateContent({
       model: MODEL,
       contents: judgeUser(profile, question, answer),
       config: {
-        systemInstruction: judgeSystem(boss),
+        systemInstruction: judgeSystem(boss, mode),
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -327,13 +330,14 @@ export async function generateVerdict(
   profile: CompanyProfile,
   transcript: string,
   outcome: 'funded' | 'passed',
+  mode?: ModeConfig,
 ): Promise<Verdict> {
   try {
     const res = await ai.models.generateContent({
       model: MODEL,
       contents: verdictUser(profile, transcript),
       config: {
-        systemInstruction: verdictSystem(outcome),
+        systemInstruction: verdictSystem(outcome, mode),
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,

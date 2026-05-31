@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import { sfx } from '../lib/sfx';
 
 interface AnswerInputProps {
   onSubmit: (answer: string) => void;
@@ -8,6 +8,13 @@ interface AnswerInputProps {
 
 const MAX = 600;
 
+/**
+ * Retro arcade terminal input. Same contract (onSubmit + disabled), Cmd/Ctrl+Enter
+ * to fire, MAX-capped. Reskinned: pixel-framed terminal field with a blinking
+ * caret prompt, 8-bit blip on type + submit, and a "THINKING..." locked state
+ * while the boss is judging. Colors track the active --accent (set by Arena's
+ * data-mode wrapper).
+ */
 export function AnswerInput({ onSubmit, disabled }: AnswerInputProps) {
   const [value, setValue] = useState('');
 
@@ -16,8 +23,16 @@ export function AnswerInput({ onSubmit, disabled }: AnswerInputProps) {
 
   const submit = () => {
     if (!canSubmit) return;
+    sfx.blip();
     onSubmit(trimmed);
     setValue('');
+  };
+
+  const onChange = (next: string) => {
+    const clipped = next.slice(0, MAX);
+    // 8-bit tick on actual new characters (not on backspace/paste-shrink).
+    if (clipped.length > value.length) sfx.blip();
+    setValue(clipped);
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -29,49 +44,45 @@ export function AnswerInput({ onSubmit, disabled }: AnswerInputProps) {
 
   return (
     <div className="w-full">
-      <div
-        className={`group relative rounded-2xl border bg-black/40 backdrop-blur transition-colors ${
-          disabled ? 'border-white/5 opacity-60' : 'border-white/10 focus-within:border-cyan-400/50'
-        }`}
-      >
+      <div className={`pixel-panel scanline p-3 ${disabled ? 'opacity-70' : ''}`}>
+        {/* terminal prompt line */}
+        <div className="mb-1 flex items-center gap-2">
+          <span className="font-pixel text-[8px]" style={{ color: 'var(--accent)' }}>
+            {disabled ? 'BOSS_INTERROGATING' : 'YOUR_REBUTTAL'}
+          </span>
+          <span className="font-pixel text-[8px] text-neonInk/30">{'>'}_</span>
+        </div>
+
         <textarea
           value={value}
-          onChange={(e) => setValue(e.target.value.slice(0, MAX))}
+          onChange={(e) => onChange(e.target.value)}
           onKeyDown={onKeyDown}
           disabled={disabled}
           rows={3}
-          placeholder={disabled ? 'The investor is thinking…' : 'Defend your idea. Be specific — vague answers cost you credibility.'}
-          className="w-full resize-none rounded-2xl bg-transparent px-4 py-3.5 text-sm text-white placeholder-white/30 outline-none sm:text-base"
+          placeholder={
+            disabled
+              ? 'THINKING...'
+              : 'Defend your idea. Be specific — vague answers cost you credibility.'
+          }
+          className="w-full resize-none bg-transparent px-1 py-1 text-lg text-neonInk outline-none placeholder:text-neonInk/30 sm:text-xl"
+          style={{ border: 'none', boxShadow: 'none' }}
         />
-        <div className="flex items-center justify-between gap-3 px-4 pb-3">
-          <span className="hidden text-[11px] text-white/30 sm:block">
-            Press{' '}
-            <kbd className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-white/60">
-              ⌘ / Ctrl
-            </kbd>{' '}
-            +{' '}
-            <kbd className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-white/60">
-              Enter
-            </kbd>{' '}
-            to fire back
+
+        <div className="mt-1 flex items-center justify-between gap-3">
+          <span className="hidden font-pixel text-[7px] text-neonInk/40 sm:block">
+            [CTRL/⌘ + ENTER] FIRE BACK
           </span>
-          <span className="font-mono text-[11px] tabular-nums text-white/30 sm:hidden">
+          <span className="font-pixel text-[7px] tabular-nums text-neonInk/40 sm:hidden">
             {value.length}/{MAX}
           </span>
-          <motion.button
+          <button
             type="button"
             onClick={submit}
             disabled={!canSubmit}
-            whileHover={canSubmit ? { scale: 1.03 } : undefined}
-            whileTap={canSubmit ? { scale: 0.97 } : undefined}
-            className={`relative overflow-hidden rounded-xl px-5 py-2.5 text-sm font-bold tracking-tight transition-all ${
-              canSubmit
-                ? 'bg-gradient-to-r from-cyan-400 to-violet-500 text-black shadow-[0_0_24px_rgba(34,211,238,0.45)]'
-                : 'cursor-not-allowed bg-white/5 text-white/30'
-            }`}
+            className="arcade-btn text-[9px] sm:text-[10px]"
           >
-            {disabled ? 'Awaiting…' : 'Counter'}
-          </motion.button>
+            {disabled ? 'THINKING...' : 'COUNTER'}
+          </button>
         </div>
       </div>
     </div>

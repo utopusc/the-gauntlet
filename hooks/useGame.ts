@@ -2,7 +2,13 @@
 // Returns the full GameApi. Drives:
 //   onboard -> analyzing -> profile -> arena -> win | lose
 import { useCallback, useRef, useState } from 'react';
-import { BOSSES, FOUNDER_MAX_HP, MAX_ROUNDS_PER_BOSS } from '../constants';
+import {
+  BOSSES,
+  DEFAULT_MODE,
+  FOUNDER_MAX_HP,
+  MAX_ROUNDS_PER_BOSS,
+  getMode,
+} from '../constants';
 import {
   analyzeCompany,
   generateBossQuestion,
@@ -15,17 +21,28 @@ import type {
   CompanyInput,
   CompanyProfile,
   GameApi,
+  GameMode,
   GamePhase,
   InvestorMatch,
   JudgeResult,
+  ModeConfig,
   Verdict,
 } from '../types';
 
-const freshBosses = (): BossState[] =>
-  BOSSES.map((b) => ({ ...b, hp: b.maxHp, defeated: false }));
+// Bosses at full HP. `mult` scales each boss's maxHp (and starting hp) by the
+// active mode's bossHpMult — applied fresh at arena entry. Default 1 = base balance.
+const freshBosses = (mult = 1): BossState[] =>
+  BOSSES.map((b) => {
+    const maxHp = Math.max(1, Math.round(b.maxHp * mult));
+    return { ...b, maxHp, hp: maxHp, defeated: false };
+  });
 
 export function useGame(): GameApi {
   const [phase, setPhase] = useState<GamePhase>('onboard');
+
+  // mode (chosen on Onboard, before the battle). Default keeps original balance.
+  const [mode, setModeState] = useState<GameMode>(DEFAULT_MODE);
+  const modeRef = useRef<ModeConfig>(getMode(DEFAULT_MODE)); // freshest resolved config for async flows
 
   // intake + analysis
   const [companyInput, setCompanyInput] = useState<CompanyInput | null>(null);
@@ -37,8 +54,10 @@ export function useGame(): GameApi {
   const [matching, setMatching] = useState(false);
 
   // arena
-  const [bosses, setBosses] = useState<BossState[]>(freshBosses);
+  const [bosses, setBosses] = useState<BossState[]>(() => freshBosses());
   const [currentBossIndex, setCurrentBossIndex] = useState(0);
+  // founderMaxHp is the mode-scaled ceiling; founderHp is the current value.
+  const [founderMaxHp, setFounderMaxHp] = useState(FOUNDER_MAX_HP);
   const [founderHp, setFounderHp] = useState(FOUNDER_MAX_HP);
   const [question, setQuestion] = useState('');
   const [lastResult, setLastResult] = useState<JudgeResult | null>(null);
@@ -55,6 +74,13 @@ export function useGame(): GameApi {
   const profileRef = useRef<CompanyProfile | null>(null); // freshest profile for async grounding
 
   const currentBoss = bosses[currentBossIndex] ?? null;
+
+  // Select the active mode (called from the Onboard mode selector). Keeps modeRef
+  // in sync so in-flight async battle calls always read the freshest config.
+  const setMode = useCallback((m: GameMode) => {
+    modeRef.current = getMode(m);
+    setModeState(m);
+  }, []);
 
   const appendTranscript = (line: string) => {
     transcriptRef.current += (transcriptRef.current ? '\n' : '') + line;
@@ -95,7 +121,7 @@ export function useGame(): GameApi {
     setLoading(true);
     setError(null);
     try {
-      const q = await generateBossQuestion(profile, boss, askedRef.current);
+      const q = await generateBossQuestion(profile, boss, askedRef.current, modeRef.current);
       askedRef.current = [...askedRef.current, q];
       appendTranscript(`[${boss.name} — ${boss.title}] Q: ${q}`);
       setQuestion(q);
@@ -110,13 +136,17 @@ export function useGame(): GameApi {
   const enterArena = useCallback(() => {
     const profile = profileRef.current;
     if (!profile) return;
-    const startBosses = freshBosses();
+    // Apply the active mode's balance: tankier/squishier bosses + scaled founder HP.
+    const cfg = modeRef.current;
+    const startBosses = freshBosses(cfg.bossHpMult);
+    const scaledFounderMax = Math.max(1, Math.round(FOUNDER_MAX_HP * cfg.founderHpMult));
     roundRef.current = 0;
     askedRef.current = [];
     transcriptRef.current = `Company: ${profile.name} — ${profile.tagline}`;
     setBosses(startBosses);
     setCurrentBossIndex(0);
-    setFounderHp(FOUNDER_MAX_HP);
+    setFounderMaxHp(scaledFounderMax);
+    setFounderHp(scaledFounderMax);
     setQuestion('');
     setLastResult(null);
     setVerdict(null);
@@ -144,7 +174,7 @@ export function useGame(): GameApi {
     setError(null);
     try {
       const v = profile
-        ? await generateVerdict(profile, transcriptRef.current, outcome)
+        ? await generateVerdict(profile, transcriptRef.current, outcome, modeRef.current)
         : null;
       setVerdict(v);
 
@@ -178,8 +208,9 @@ export function useGame(): GameApi {
 
       setLoading(true);
       setError(null);
+      const cfg = modeRef.current;
       try {
-        const result = await judgeAnswer(profile, boss, question, trimmed);
+        const result = await judgeAnswer(profile, boss, question, trimmed, cfg);
         setLastResult(result);
         appendTranscript(`A: ${trimmed}`);
         appendTranscript(
@@ -195,8 +226,9 @@ export function useGame(): GameApi {
           ),
         );
 
-        // Apply self-damage to the founder.
-        const newFounderHp = Math.max(0, founderHp - result.selfDamage);
+        // Apply self-damage to the founder, scaled by the mode (FUN softens, EXPERT amplifies).
+        const scaledSelfDamage = Math.round(result.selfDamage * cfg.selfDamageMult);
+        const newFounderHp = Math.max(0, founderHp - scaledSelfDamage);
         setFounderHp(newFounderHp);
 
         roundRef.current += 1;
@@ -207,7 +239,7 @@ export function useGame(): GameApi {
           return;
         }
 
-        const roundsExhausted = roundRef.current >= MAX_ROUNDS_PER_BOSS;
+        const roundsExhausted = roundRef.current >= cfg.rounds;
 
         // 2) Boss still standing and rounds remain -> next question, same boss.
         if (!bossDown && !roundsExhausted) {
@@ -255,8 +287,12 @@ export function useGame(): GameApi {
     setAnalyzing(false);
     setInvestors([]);
     setMatching(false);
+    // Reset to BASE balance; enterArena re-applies the active mode's mults.
+    // The selected `mode` itself is intentionally preserved across reset so a
+    // replay honors the founder's chosen difficulty.
     setBosses(freshBosses());
     setCurrentBossIndex(0);
+    setFounderMaxHp(FOUNDER_MAX_HP);
     setFounderHp(FOUNDER_MAX_HP);
     setQuestion('');
     setLastResult(null);
@@ -266,6 +302,8 @@ export function useGame(): GameApi {
   }, []);
 
   return {
+    mode,
+    setMode,
     phase,
     companyInput,
     companyProfile,
@@ -276,6 +314,7 @@ export function useGame(): GameApi {
     currentBossIndex,
     currentBoss,
     founderHp,
+    founderMaxHp,
     question,
     lastResult,
     loading,

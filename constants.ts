@@ -1,14 +1,83 @@
 // THE GAUNTLET — game constants (W2)
-import type { Boss } from './types';
+import type { Boss, GameMode, ModeConfig } from './types';
 
 // Single source of truth for the model. Swap to a gemini-3 model here if/when available.
 export const MODEL = 'gemini-2.5-flash';
 
 // Founder's starting credibility. Hit 0 and you're walked out of the room.
+// This is the BASE value; the active ModeConfig.founderHpMult scales it at arena entry.
 export const FOUNDER_MAX_HP = 100;
 
-// Max question/answer rounds the founder gets per boss before forced advance.
+// Base question/answer rounds per boss. The active ModeConfig.rounds overrides this
+// in the arena; this constant remains the safe default if no mode is wired.
 export const MAX_ROUNDS_PER_BOSS = 3;
+
+// ---- game modes -----------------------------------------------------------
+
+/**
+ * The three difficulty / tone modes, chosen on the Onboard screen before the fight.
+ * `vibe` is injected verbatim into every battle prompt (question / judge / verdict),
+ * and the numeric knobs scale the arena math. NORMAL is the original, balanced behavior.
+ */
+export const MODES: ModeConfig[] = [
+  {
+    id: 'fun',
+    label: 'FUN',
+    tagline: 'Chaos mode. Unhinged questions, soft landings.',
+    emoji: '🎉',
+    accent: '#ec4899', // magenta
+    bossHpMult: 0.8, // squishier bosses — easier to KO
+    founderHpMult: 1.3, // you can take a beating
+    selfDamageMult: 0.6, // bad answers barely sting
+    rounds: 2, // shorter rounds, more laughs
+    strictness: 'lenient',
+    vibe:
+      'Ask WILD, absurd, meme-y curveball questions that are still about THIS exact company but completely unhinged — ' +
+      'think late-night-arcade chaos energy, surreal hypotheticals, and ridiculous what-ifs. Keep it comedic and playful, ' +
+      'never mean. Judge generously and reward boldness, jokes, and vibes over rigor. Critiques should be funny and kind.',
+  },
+  {
+    id: 'normal',
+    label: 'NORMAL',
+    tagline: 'A real VC pitch. Sharp, fair, no mercy needed.',
+    emoji: '⚔️',
+    accent: '#22d3ee', // cyan
+    bossHpMult: 1.0,
+    founderHpMult: 1.0,
+    selfDamageMult: 1.0,
+    rounds: 3,
+    strictness: 'fair',
+    vibe:
+      'Ask realistic, sharp, fair VC questions that target the real weak points of THIS company. ' +
+      'Be a credible top-tier investor: confident, fun, a little intimidating, but always grounded in real fundraising objections. ' +
+      'Judge fairly — reward real substance, punish fluff.',
+  },
+  {
+    id: 'expert',
+    label: 'EXPERT',
+    tagline: 'Brutal. Technical. Rapid-fire. The bosses smell blood.',
+    emoji: '💀',
+    accent: '#ef4444', // red / amber-leaning
+    bossHpMult: 1.3, // tankier bosses — grind them down
+    founderHpMult: 0.8, // fragile founder — one bad round can end you
+    selfDamageMult: 1.5, // mistakes are punished hard
+    rounds: 3,
+    strictness: 'harsh',
+    vibe:
+      'Ask BRUTAL, deeply technical, rapid-fire questions that go straight for the jugular of THIS company. ' +
+      'No softballs — interrogate the hardest assumptions, the unit economics, the defensibility, the data, the moat. ' +
+      'Ruthless and exacting in tone. Judge stingily: only genuinely rigorous, evidence-backed answers earn real damage; ' +
+      'hand-waving gets torn apart.',
+  },
+];
+
+/** Default mode used when nothing is selected. Keeps the original balanced feel. */
+export const DEFAULT_MODE: GameMode = 'normal';
+
+/** Lookup a ModeConfig by id, falling back to NORMAL so callers never get undefined. */
+export function getMode(id: GameMode | undefined | null): ModeConfig {
+  return MODES.find((m) => m.id === id) ?? MODES.find((m) => m.id === DEFAULT_MODE)!;
+}
 
 /**
  * The three bosses map 1:1 to the hackathon judging criteria:

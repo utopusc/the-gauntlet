@@ -1,13 +1,19 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import type { CompanyProfile, GameApi } from '../types';
-import { Button } from './ui/Button';
+import type { CompanyProfile, GameApi, GameMode } from '../types';
+import { getMode } from '../constants';
+import { sfx } from '../lib/sfx';
 
 interface ProfileScreenProps {
   game: GameApi;
 }
 
-/* A single labelled dossier field. */
+/** Map a GameMode -> data-mode attribute value so child .accent classes recolor. */
+function dataModeOf(mode: GameMode): 'fun' | 'normal' | 'expert' {
+  return mode === 'fun' || mode === 'expert' ? mode : 'normal';
+}
+
+/* A single labelled dossier "PLAYER STATS" field. */
 const Field: React.FC<{ label: string; value: string; delay: number }> = ({
   label,
   value,
@@ -17,42 +23,47 @@ const Field: React.FC<{ label: string; value: string; delay: number }> = ({
     initial={{ opacity: 0, y: 12 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ delay, duration: 0.4 }}
-    className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur"
+    className="pixel-panel scanline p-4"
   >
-    <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/35">
-      {label}
-    </p>
-    <p className="text-sm leading-relaxed text-white/80">{value}</p>
+    <p className="font-pixel glow mb-2 text-[8px] tracking-[0.18em]">{label}</p>
+    <p className="font-retro text-lg leading-snug text-neonInk/85">{value}</p>
   </motion.div>
 );
 
-/* Chip list for signals (positive) / red flags (negative). */
+/* Chip list for signals (green) / red flags (amber). */
 const ChipList: React.FC<{
   label: string;
   items: string[];
   tone: 'good' | 'bad';
   delay: number;
 }> = ({ label, items, tone, delay }) => {
-  const color = tone === 'good' ? '#34d399' : '#fb7185';
-  const bg = tone === 'good' ? 'rgba(52,211,153,0.1)' : 'rgba(251,113,133,0.1)';
-  const border = tone === 'good' ? 'rgba(52,211,153,0.3)' : 'rgba(251,113,133,0.3)';
+  // signals = green chips, redFlags = amber chips (per spec)
+  const color = tone === 'good' ? 'var(--neon-green)' : 'var(--neon-amber)';
+  const dot = tone === 'good' ? '#39ff8b' : '#ffb627';
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.4 }}
-      className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur"
+      className="pixel-panel scanline p-4"
     >
-      <p className="mb-2.5 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.22em]" style={{ color }}>
-        <span className="h-1.5 w-1.5 rounded-full" style={{ background: color }} />
+      <p
+        className="font-pixel mb-3 flex items-center gap-2 text-[8px] tracking-[0.16em]"
+        style={{ color: dot, textShadow: `0 0 8px ${dot}88` }}
+      >
+        <span className="inline-block h-2 w-2" style={{ background: dot }} />
         {label}
       </p>
       <ul className="flex flex-wrap gap-2">
         {items.map((item, i) => (
           <li
             key={`${label}-${i}`}
-            className="rounded-full border px-3 py-1 text-xs text-white/80"
-            style={{ background: bg, borderColor: border }}
+            className="font-retro border-2 px-3 py-1 text-base text-neonInk/90"
+            style={{
+              borderColor: color,
+              background: tone === 'good' ? 'rgba(57,255,139,0.1)' : 'rgba(255,182,39,0.1)',
+              boxShadow: `inset 0 0 10px -4px ${dot}`,
+            }}
           >
             {item}
           </li>
@@ -64,61 +75,77 @@ const ChipList: React.FC<{
 
 export function ProfileScreen({ game }: ProfileScreenProps) {
   const profile: CompanyProfile | null = game.companyProfile;
+  const mode = getMode(game.mode);
 
   // Defensive: should not render without a profile, but never strand the user.
   if (!profile) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-6 text-center">
-        <p className="text-lg text-white/60">No dossier to review yet…</p>
-        <Button variant="outline" onClick={game.reset}>
-          Back to start
-        </Button>
+      <div
+        data-mode={dataModeOf(game.mode)}
+        className="flex flex-1 flex-col items-center justify-center gap-6 text-center"
+      >
+        <p className="font-pixel glow text-sm text-neonInk/70">NO DOSSIER TO REVIEW YET...</p>
+        <button
+          type="button"
+          onClick={() => {
+            sfx.blip();
+            game.reset();
+          }}
+          className="arcade-btn arcade-btn--ghost font-pixel text-xs"
+        >
+          ◀ BACK TO START
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-1 flex-col py-6">
-      {/* Header */}
+    <div data-mode={dataModeOf(game.mode)} className="flex flex-1 flex-col py-6">
+      {/* Header — PLAYER STATS readout */}
       <motion.div
         initial={{ opacity: 0, y: -12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45 }}
         className="text-center"
       >
-        <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-cyan-300/70">
-          Diligence dossier
+        <p className="font-pixel glow text-[9px] tracking-[0.28em] text-neonAmber">
+          ★ PLAYER STATS · DILIGENCE DOSSIER ★
         </p>
-        <h1 className="mt-2 text-4xl font-black tracking-tight text-white sm:text-5xl">
+        <h1 className="font-pixel glow mt-4 text-2xl leading-[1.4] tracking-tight text-neonInk sm:text-3xl">
           {profile.name}
         </h1>
-        <p className="mx-auto mt-2 max-w-2xl text-base text-white/55">{profile.tagline}</p>
-        <p className="mx-auto mt-3 inline-flex max-w-full items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-white/45 backdrop-blur">
-          <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
+        <p className="font-retro mx-auto mt-3 max-w-2xl text-lg text-neonInk/60">
+          {profile.tagline}
+        </p>
+        <p className="font-pixel pixel-panel scanline mx-auto mt-4 inline-flex max-w-full items-center gap-2 px-3 py-2 text-[8px] text-neonInk/55">
+          <span className="inline-block h-2 w-2" style={{ background: mode.accent }} />
           <span className="truncate">{profile.sourceNote}</span>
         </p>
       </motion.div>
 
       {game.error && (
-        <div className="mx-auto mt-5 w-full max-w-2xl rounded-2xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-center text-sm text-amber-200">
+        <div
+          className="pixel-panel font-retro mx-auto mt-5 w-full max-w-2xl px-4 py-3 text-center text-base text-neonAmber"
+          style={{ ['--accent' as string]: 'var(--neon-amber)' }}
+        >
           {game.error}
         </div>
       )}
 
       {/* Dossier grid */}
       <div className="mt-8 grid grid-cols-1 gap-3 md:grid-cols-2">
-        <Field label="Problem" value={profile.problem} delay={0.1} />
-        <Field label="Solution" value={profile.solution} delay={0.14} />
-        <Field label="Market" value={profile.market} delay={0.18} />
-        <Field label="Traction" value={profile.traction} delay={0.22} />
-        <Field label="Team" value={profile.team} delay={0.26} />
-        <Field label="Business model" value={profile.businessModel} delay={0.3} />
+        <Field label="PROBLEM" value={profile.problem} delay={0.1} />
+        <Field label="SOLUTION" value={profile.solution} delay={0.14} />
+        <Field label="MARKET" value={profile.market} delay={0.18} />
+        <Field label="TRACTION" value={profile.traction} delay={0.22} />
+        <Field label="TEAM" value={profile.team} delay={0.26} />
+        <Field label="BUSINESS MODEL" value={profile.businessModel} delay={0.3} />
       </div>
 
       {/* Signals + red flags */}
       <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-        <ChipList label="Signals" items={profile.signals} tone="good" delay={0.34} />
-        <ChipList label="Red flags the room will attack" items={profile.redFlags} tone="bad" delay={0.38} />
+        <ChipList label="SIGNALS" items={profile.signals} tone="good" delay={0.34} />
+        <ChipList label="RED FLAGS — THE ROOM WILL ATTACK" items={profile.redFlags} tone="bad" delay={0.38} />
       </div>
 
       {/* The ask + CTA */}
@@ -126,33 +153,39 @@ export function ProfileScreen({ game }: ProfileScreenProps) {
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.44, duration: 0.45 }}
-        className="mt-8 flex flex-col items-center gap-4 rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-transparent p-6 text-center backdrop-blur"
+        className="pixel-panel scanline mt-8 flex flex-col items-center gap-4 p-6 text-center"
       >
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-white/35">
-            You're raising
-          </p>
-          <p className="mt-1 text-3xl font-black tracking-tight text-cyan-200">
+          <p className="font-pixel text-[8px] tracking-[0.22em] text-neonInk/45">YOU'RE RAISING</p>
+          <p className="font-pixel glow mt-3 text-2xl tracking-tight" style={{ color: mode.accent }}>
             {profile.askAmount}
           </p>
         </div>
-        <p className="max-w-md text-sm text-white/55">
+        <p className="font-retro max-w-md text-lg leading-snug text-neonInk/60">
           This is what the partners read before you walked in. Step into the arena and
-          defend it — three rounds each, vague answers cost you credibility.
+          defend it — vague answers cost you credibility.
         </p>
         <div className="flex w-full max-w-md flex-col gap-3 sm:flex-row">
-          <Button variant="ghost" size="md" className="flex-1" onClick={game.reset}>
-            ← Edit intake
-          </Button>
-          <Button
-            variant="primary"
-            size="md"
-            glow
-            className="flex-1"
-            onClick={game.enterArena}
+          <button
+            type="button"
+            onClick={() => {
+              sfx.blip();
+              game.reset();
+            }}
+            className="arcade-btn arcade-btn--ghost font-pixel flex-1 text-xs"
           >
-            ⚔️ Face the partners
-          </Button>
+            ◀ EDIT INTAKE
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              sfx.select();
+              game.enterArena();
+            }}
+            className="arcade-btn font-pixel flex-1 text-xs"
+          >
+            ⚔ ENTER THE GAUNTLET
+          </button>
         </div>
       </motion.div>
     </div>

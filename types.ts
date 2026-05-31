@@ -5,6 +5,45 @@
 // profile: dossier review | arena: boss fight | win: $5M raise flow | lose: rejection
 export type GamePhase = 'onboard' | 'analyzing' | 'profile' | 'arena' | 'win' | 'lose';
 
+// ---- game mode ------------------------------------------------------------
+
+/**
+ * Difficulty / tone selector chosen on the Onboard screen BEFORE the battle.
+ *   fun    -> absurd, meme-y curveballs; lenient judging; comedic critiques; soft on the founder.
+ *   normal -> realistic, sharp, fair VC questions (the original behavior). Balanced.
+ *   expert -> brutal, technical, rapid-fire, ruthless; tankier bosses + fragile founder + harsh judging.
+ */
+export type GameMode = 'fun' | 'normal' | 'expert';
+
+/**
+ * Full personality + balance knobs for a mode. Drives BOTH the prompts (vibe/strictness)
+ * and the arena math (HP multipliers, self-damage, rounds). `accent` is a CSS color the
+ * UI uses to theme the selector + the active-mode flourish.
+ */
+export interface ModeConfig {
+  id: GameMode;
+  /** Short uppercase label for the selector chip, e.g. "FUN". */
+  label: string;
+  /** One-line pitch shown under the label, e.g. "Chaos mode. Anything goes.". */
+  tagline: string;
+  /** Single emoji shown on the mode chip. */
+  emoji: string;
+  /** CSS color (hex) — magenta (fun) / cyan (normal) / red (expert). */
+  accent: string;
+  /** Boss maxHp multiplier (>1 = tankier bosses). */
+  bossHpMult: number;
+  /** Founder maxHp multiplier (>1 = founder survives more punishment). */
+  founderHpMult: number;
+  /** Multiplier applied to the founder's self-damage per bad answer (>1 = punished harder). */
+  selfDamageMult: number;
+  /** Rounds the founder gets per boss before forced advance. */
+  rounds: number;
+  /** How the judge scores: lenient = generous, fair = balanced, harsh = stingy. */
+  strictness: 'lenient' | 'fair' | 'harsh';
+  /** A sentence injected into EVERY battle prompt describing question style + tone. */
+  vibe: string;
+}
+
 export interface Boss {
   id: string;
   name: string;
@@ -91,6 +130,12 @@ export interface InvestorMatch {
 }
 
 export interface GameApi {
+  // ---- mode (chosen on Onboard, before the battle) ----
+  /** Active game mode. Defaults to 'normal'. */
+  mode: GameMode;
+  /** Set the active mode (call from the Onboard mode selector). */
+  setMode: (m: GameMode) => void;
+
   // ---- phase + intake ----
   phase: GamePhase;
   companyInput: CompanyInput | null;
@@ -106,6 +151,8 @@ export interface GameApi {
   currentBossIndex: number;
   currentBoss: BossState | null;
   founderHp: number;
+  /** Mode-scaled founder HP ceiling (FOUNDER_MAX_HP * mode.founderHpMult). Use for the HP bar denominator. */
+  founderMaxHp: number;
   question: string;
   lastResult: JudgeResult | null;
 
