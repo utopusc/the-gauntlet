@@ -20,8 +20,14 @@ Basement hackathon.
 - **Look & feel:** Pixel-retro **arcade reskin** — CRT scanline overlay (never
   blocks clicks), `VT323` body font + `Press Start 2P` arcade buttons, segmented
   HP bars, neon accents, and SFX with a persistent mute toggle.
-- **Difficulty:** Three modes — **Fun · Normal · Expert** — that shift the accent
-  color, copy, and boss brutality (mode drives `data-mode` → `--accent`).
+- **Difficulty:** Four modes — **Easy · Fun · Normal · Expert** — that shift the
+  accent color, copy, boss brutality, per-question **timer**, and **score
+  multiplier** (mode drives `data-mode` → `--accent`). Easy adds a 90s timer and
+  `0.5×` scoring as an on-ramp for first-timers.
+- **Scoring & replayability:** Live **score** + **combo** multiplier, a per-question
+  **timer with a speed bonus**, and a **persistent leaderboard** (enter a name,
+  qualifying runs are saved and ranked). Answers also draw **quality follow-ups** —
+  the boss probes deeper on your weakest point, not a canned next question.
 
 ---
 
@@ -39,9 +45,11 @@ so the same code runs locally and in AI Studio unchanged.
    `constants.ts`, `prompts.ts`, `types.ts`, `vite.config.ts`).
 3. **Set the key:** ensure a valid **`GEMINI_API_KEY`** is configured in the
    AI Studio environment (Studio maps it into `process.env.API_KEY` for you).
-4. **Run.** Paste your **company URL** (or upload a **pitch PDF**, or type an idea)
-   → Gemini analyzes it → review the dossier → **ENTER THE ARENA** → battle the
-   three bosses → win to reach the **$5M raise** screen with matched investors.
+4. **Run.** Pick a difficulty (**Easy / Fun / Normal / Expert**) → paste your
+   **company URL** (or upload a **pitch PDF**, or type an idea) → Gemini analyzes it
+   → review the dossier → **ENTER THE ARENA** → battle the three bosses against the
+   per-question timer, building **score + combo** → win to reach the **$5M raise**
+   screen, then log your run on the **leaderboard**.
 
 > Website analysis uses Gemini's native **URL context** tool — there is **no
 > backend, scraper, or Firecrawl dependency** to configure. Everything runs in the
@@ -74,8 +82,8 @@ npm run dev          # dev server, typically http://localhost:5173
 Production: `npm run build` → output in `dist/`; preview with `npm run preview`.
 
 **Build status:** ✅ Green. `npm install` and `npm run build` (vite v6.4.2,
-408 modules) both exit 0. The only output is an advisory >500 kB chunk note
-(gzip 162 kB) — a code-splitting suggestion, not an error.
+415 modules) both exit 0. The only output is an advisory >500 kB chunk note — a
+code-splitting suggestion, not an error.
 
 ---
 
@@ -115,9 +123,12 @@ Most "AI pitch coach" demos are one chat box that says "great idea!" The Gauntle
 an actual dossier — then ships **three distinct adversaries** mapped to how funds
 actually diligence: market (TAM/why-now/moat), tech (feasibility/data advantage),
 GTM (distribution/CAC-LTV). Every question is **grounded on your extracted profile**,
-not generic. Win and you don't just get a score — you reach a **$5M raise flow**
-with matched investors and warm-intro emails you could actually send. Real game
-feel (animated HP bars, damage numbers, Framer Motion) and a built-in viral loop
-(every play ends in a postable verdict card).
+not generic — and the boss fires **quality follow-ups** that dig into your weakest
+answer. Win and you don't just get a score — you reach a **$5M raise flow**
+with matched investors and warm-intro emails you could actually send. It now plays
+for **points**: live score, a **combo** multiplier, a per-question **timer with a
+speed bonus**, four difficulty modes (**Easy → Expert**), and a **persistent
+leaderboard** to chase. Real game feel (animated HP bars, damage numbers, Framer
+Motion) and a built-in viral loop (every play ends in a postable verdict card).
 
 *Built for the Gauntlet. Now go raise.*

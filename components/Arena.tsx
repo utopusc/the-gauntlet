@@ -6,6 +6,8 @@ import { sfx } from '../lib/sfx';
 import { BossCard } from './BossCard';
 import { HpBar } from './HpBar';
 import { AnswerInput } from './AnswerInput';
+import { Timer } from './Timer';
+import { ScoreHud } from './ScoreHud';
 
 interface ArenaProps {
   game: GameApi;
@@ -154,6 +156,16 @@ export function Arena({ game }: ArenaProps) {
 
   const ratingMeta = result ? RATING_META[result.rating] ?? RATING_META.solid : null;
 
+  // Speed-tier badge color (mirrors ScoreHud): FAST=green, QUICK=cyan, OK=amber, TIME OUT=red.
+  const speedColor =
+    game.lastSpeed === 'FAST'
+      ? 'var(--neon-green)'
+      : game.lastSpeed === 'QUICK'
+        ? 'var(--neon-cyan)'
+        : game.lastSpeed === 'TIME OUT'
+          ? 'var(--neon-red)'
+          : 'var(--neon-amber)';
+
   // What grounds the fight: the site if we read one, else the uploaded deck, else the idea.
   const groundedSource = game.companyInput?.url
     ? 'your site'
@@ -194,15 +206,24 @@ export function Arena({ game }: ArenaProps) {
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={toggleMute}
-          className="arcade-btn arcade-btn--ghost text-[8px] sm:text-[9px]"
-          aria-pressed={muted}
-          title={muted ? 'Sound off — click to enable' : 'Sound on — click to mute'}
-        >
-          {muted ? '🔇 MUTE' : '🔊 SFX'}
-        </button>
+        {/* Corner HUD cluster: live SCORE/COMBO + mute toggle. */}
+        <div className="flex items-start gap-3">
+          <ScoreHud
+            score={game.score}
+            combo={game.combo}
+            lastPoints={game.lastPoints}
+            lastSpeed={game.lastSpeed}
+          />
+          <button
+            type="button"
+            onClick={toggleMute}
+            className="arcade-btn arcade-btn--ghost mt-0.5 text-[8px] sm:text-[9px]"
+            aria-pressed={muted}
+            title={muted ? 'Sound off — click to enable' : 'Sound on — click to mute'}
+          >
+            {muted ? '🔇 MUTE' : '🔊 SFX'}
+          </button>
+        </div>
       </div>
 
       {/* ===== Boss progress pips ===== */}
@@ -284,12 +305,18 @@ export function Arena({ game }: ArenaProps) {
         </AnimatePresence>
       </div>
 
-      {/* ===== Question (retro speech panel) ===== */}
+      {/* ===== Question (retro speech panel) + countdown clock ===== */}
       <div className="pixel-panel scanline relative overflow-hidden p-4 sm:p-6">
         <div className="pointer-events-none absolute -right-6 -top-6 text-7xl opacity-[0.07]">{boss.emoji}</div>
-        <p className="font-pixel mb-3 text-[8px] sm:text-[9px]" style={{ color: 'var(--accent)' }}>
-          {boss.name} ASKS
-        </p>
+        <div className="mb-3 flex items-end justify-between gap-4">
+          <p className="font-pixel text-[8px] sm:text-[9px]" style={{ color: 'var(--accent)' }}>
+            {boss.name} ASKS
+          </p>
+          {/* Countdown lives right beside the question. Paused while the boss thinks/judges. */}
+          <div className="w-32 shrink-0 sm:w-44">
+            <Timer timeLeft={game.timeLeft} timeLimit={game.timeLimit} paused={game.loading} />
+          </div>
+        </div>
         <QuestionBlock question={game.question} loading={game.loading} />
       </div>
 
@@ -312,6 +339,17 @@ export function Arena({ game }: ArenaProps) {
                 >
                   {ratingMeta.label} REBUTTAL
                 </span>
+                {/* Speed tier from the clock at submit (FAST/QUICK/OK/TIME OUT). */}
+                {game.lastSpeed && (
+                  <span
+                    className="font-pixel border-2 px-2 py-1 text-[8px] leading-none"
+                    style={{ borderColor: speedColor, color: speedColor }}
+                    title="How fast you answered"
+                  >
+                    {game.lastSpeed}
+                    {game.lastPoints && game.lastPoints > 0 ? ` +${game.lastPoints.toLocaleString()}` : ''}
+                  </span>
+                )}
                 {result.damage > 0 && (
                   <span className="font-pixel text-[8px]" style={{ color: 'var(--neon-green)' }}>
                     -{Math.round(result.damage)} SKEPTICISM

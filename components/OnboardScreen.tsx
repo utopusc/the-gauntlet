@@ -7,6 +7,8 @@ import { sfx } from '../lib/sfx';
 
 interface OnboardScreenProps {
   game: GameApi;
+  /** Open the App-owned HIGH SCORES (leaderboard) overlay. */
+  onOpenLeaderboard: () => void;
 }
 
 const ACCENT_HEX: Record<string, string> = {
@@ -21,8 +23,8 @@ function accentHex(accent: string): string {
 }
 
 /** Map a GameMode -> data-mode attribute value so child .accent classes recolor. */
-function dataModeOf(mode: GameMode): 'fun' | 'normal' | 'expert' {
-  return mode === 'fun' || mode === 'expert' ? mode : 'normal';
+function dataModeOf(mode: GameMode): 'easy' | 'fun' | 'normal' | 'expert' {
+  return mode === 'easy' || mode === 'fun' || mode === 'expert' ? mode : 'normal';
 }
 
 const EXAMPLES = [
@@ -169,7 +171,7 @@ function ModeSelector({ game }: { game: GameApi }) {
       <p className="font-pixel mb-3 text-center text-[9px] tracking-[0.25em] text-neonInk/45">
         SELECT YOUR RUN
       </p>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {MODES.map((m, i) => {
           const active = m.id === game.mode;
           return (
@@ -220,7 +222,7 @@ function ModeSelector({ game }: { game: GameApi }) {
                 {m.tagline}
               </span>
 
-              {/* difficulty meter — filled segs by mode order */}
+              {/* difficulty meter — one seg per mode, filled by order */}
               <span className="mt-1 flex gap-1" aria-hidden>
                 {MODES.map((_, di) => (
                   <span
@@ -233,6 +235,29 @@ function ModeSelector({ game }: { game: GameApi }) {
                   />
                 ))}
               </span>
+
+              {/* per-mode stat readout — TIME (timeLimit) + multiplier (scoreMult) */}
+              <span className="mt-1 flex w-full items-center justify-center gap-3 border-t-2 border-black/40 pt-2 font-pixel text-[8px]">
+                <span className="flex flex-col items-center gap-0.5">
+                  <span className="text-neonInk/40">⏱</span>
+                  <span
+                    className="tabular-nums"
+                    style={{ color: active ? m.accent : '#7e6fa0' }}
+                  >
+                    {m.timeLimit}s
+                  </span>
+                </span>
+                <span className="h-5 w-px bg-black/40" aria-hidden />
+                <span className="flex flex-col items-center gap-0.5">
+                  <span className="text-neonInk/40">PTS</span>
+                  <span
+                    className="tabular-nums"
+                    style={{ color: active ? m.accent : '#7e6fa0' }}
+                  >
+                    ×{m.scoreMult}
+                  </span>
+                </span>
+              </span>
             </motion.button>
           );
         })}
@@ -241,7 +266,7 @@ function ModeSelector({ game }: { game: GameApi }) {
   );
 }
 
-export function OnboardScreen({ game }: OnboardScreenProps) {
+export function OnboardScreen({ game, onOpenLeaderboard }: OnboardScreenProps) {
   const [url, setUrl] = useState('');
   const [idea, setIdea] = useState('');
   const [pdfBase64, setPdfBase64] = useState<string | null>(null);
@@ -336,7 +361,23 @@ export function OnboardScreen({ game }: OnboardScreenProps) {
           />
           <span className="glow">INSERT COIN · GEMINI</span>
         </motion.div>
-        <MuteToggle />
+        <div className="flex items-center gap-2">
+          {/* HIGH SCORES — opens the App-owned leaderboard overlay */}
+          <motion.button
+            type="button"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            whileTap={{ scale: 0.96 }}
+            onClick={onOpenLeaderboard}
+            aria-label="View high scores"
+            className="font-pixel pixel-panel scanline flex items-center gap-2 px-3 py-2 text-[8px] tracking-[0.12em] text-neonInk transition-transform active:translate-x-[2px] active:translate-y-[2px] sm:text-[9px]"
+          >
+            <span className="text-sm leading-none" aria-hidden>🏆</span>
+            <span className="glow">HIGH SCORES</span>
+          </motion.button>
+          <MuteToggle />
+        </div>
       </div>
 
       {/* Title */}

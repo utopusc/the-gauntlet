@@ -5,13 +5,23 @@
 import type { Boss, CompanyProfile, ModeConfig, Verdict } from './types';
 import type { EventInvestor } from './constants';
 
+/**
+ * Per-boss Q/A/J history item used to make follow-up questions GENUINE.
+ * `rating` is the judge's bucket of the founder's answer ('weak'|'solid'|'killer').
+ */
+export interface QAHistoryItem {
+  question: string;
+  answer: string;
+  rating: string;
+}
+
 // ---- mode injection -------------------------------------------------------
 
 /**
  * The MODE block injected at the top of every battle prompt. It carries the
- * active mode's `vibe` (question style + tone) so the model adapts FUN / NORMAL /
- * EXPERT behavior. Returns '' if no mode is provided (safe back-compat — the
- * prompt then reads exactly as the original NORMAL behavior).
+ * active mode's `vibe` (question style + tone) so the model adapts EASY / FUN /
+ * NORMAL / EXPERT behavior. Returns '' if no mode is provided (safe back-compat —
+ * the prompt then reads exactly as the original NORMAL behavior).
  */
 function modeBlock(mode?: ModeConfig): string {
   if (!mode) return '';
@@ -31,10 +41,10 @@ function strictnessGuidance(mode?: ModeConfig): string {
   switch (mode?.strictness) {
     case 'lenient':
       return [
-        'SCORING STYLE — LENIENT (FUN mode): be generous. Reward boldness, humor, and energy.',
-        '- damage (0-100): a fun, committed, or clever answer = 55-100. Even a so-so answer that plays along = 35-60. Only a total non-answer = under 25.',
+        'SCORING STYLE — LENIENT (EASY / FUN mode): be generous and encouraging. Reward effort, boldness, and good instincts.',
+        '- damage (0-100): a committed, clear, or clever answer = 55-100. Even a so-so answer that engages = 35-60. Only a total non-answer = under 25.',
         '- selfDamage (0-40): keep it LOW. A confident answer = 0-3. Only a genuine faceplant = 10-20. Never above 20.',
-        '- critique: 1-2 sentences, FUNNY and kind. Playful roast energy, never harsh. Celebrate the chaos.',
+        '- critique: 1-2 sentences, warm and constructive (coaching in EASY, funny-and-kind in FUN). Celebrate what worked, nudge what to sharpen.',
         '- rating: lean toward "solid"/"killer". Reserve "weak" for total dodges.',
       ].join('\n');
     case 'harsh':
@@ -129,28 +139,78 @@ function profileContext(p: CompanyProfile): string {
 // ---- boss question --------------------------------------------------------
 
 /**
- * System instruction for generating a boss's brutal, COMPANY-specific question.
- * The model returns JSON { question: string } (1-2 sentences).
+ * System instruction for generating a boss's COMPANY-specific question.
+ * When there is prior history with this boss, the model MUST produce a genuine
+ * FOLLOW-UP (drill the weakest point of the founder's last answer). The model
+ * returns JSON { question: string } (1-2 sentences).
  */
-export function bossQuestionSystem(boss: Boss, mode?: ModeConfig): string {
-  return [
+export function bossQuestionSystem(boss: Boss, mode: ModeConfig | undefined, isFollowUp: boolean): string {
+  const base = [
     `You are ${boss.name}, ${boss.title} — a ${boss.fund} investor in a high-stakes pitch battle called THE GAUNTLET.`,
     `PERSONA: ${boss.persona}`,
     `YOUR OBSESSION: ${boss.focus}.`,
     modeBlock(mode),
-    'You will be given a real, researched dossier of the founder\'s company. Ask ONE question that targets the single weakest point of THIS exact company through your lens, in the STYLE AND TONE of the MODE above.',
-    'Rules:',
-    '- 1-2 sentences. No preamble, no greeting, no "great question". Just the question.',
-    '- Reference a CONCRETE detail from the dossier — a stated claim, a number, a red flag, the actual market or buyer. Make the founder feel you read their deck.',
-    '- Match the MODE: it dictates whether you are brutally technical, fairly sharp, or wildly absurd. Honor it.',
-    '- Never repeat a question already asked this session.',
-  ].join('\n');
+  ];
+
+  if (isFollowUp) {
+    base.push(
+      'You have ALREADY questioned this founder. Your job now is a genuine FOLLOW-UP — escalate the pressure on what they just said.',
+      'Rules for the follow-up:',
+      '- Zero in on the SINGLE weakest, vaguest, or most hand-wavy assumption in the founder\'s LAST answer.',
+      '- Quote or closely paraphrase their exact words ("You said ...") so they feel you listened.',
+      '- Make this question HARDER and more specific than the last — escalate, do not restart.',
+      '- 1-2 sentences. No preamble, no greeting, no "great question". Just the sharper question.',
+      '- Match the MODE tone (coaching in EASY, absurd in FUN, balanced in NORMAL, brutal in EXPERT).',
+      '- NEVER repeat or rephrase any question already asked this session.',
+    );
+  } else {
+    base.push(
+      'This is your OPENING question to the founder. Ask ONE question that targets the single weakest point of THIS exact company through your lens, in the STYLE AND TONE of the MODE above.',
+      'Rules:',
+      '- 1-2 sentences. No preamble, no greeting, no "great question". Just the question.',
+      '- Reference a CONCRETE detail from the dossier — a stated claim, a number, a red flag, the actual market or buyer. Make the founder feel you read their deck.',
+      '- Match the MODE: it dictates whether you are gentle and coaching, brutally technical, fairly sharp, or wildly absurd. Honor it.',
+      '- Never repeat a question already asked this session.',
+    );
+  }
+  return base.join('\n');
 }
 
-export function bossQuestionUser(profile: CompanyProfile, askedSoFar: string[]): string {
+/**
+ * User content for the boss question. Threads the per-boss Q/A history so the
+ * model can write a real follow-up, plus the list of already-asked questions to
+ * forbid repeats.
+ */
+export function bossQuestionUser(
+  profile: CompanyProfile,
+  askedSoFar: string[],
+  history: QAHistoryItem[] = [],
+): string {
   const asked = askedSoFar.length
     ? `\n\nAlready asked (do NOT repeat or rephrase these):\n- ${askedSoFar.join('\n- ')}`
     : '';
+
+  if (history.length) {
+    const last = history[history.length - 1];
+    const exchange = history
+      .map(
+        (h, i) =>
+          `Q${i + 1}: ${h.question}\nA${i + 1}: ${h.answer}\n(your read: ${h.rating})`,
+      )
+      .join('\n');
+    return [
+      profileContext(profile),
+      '',
+      'EXCHANGE SO FAR WITH THIS FOUNDER:',
+      exchange,
+      '',
+      `THE FOUNDER'S LAST ANSWER (attack the weakest part of THIS): "${last.answer}"`,
+      asked,
+      '',
+      'Write your single, sharper FOLLOW-UP question now.',
+    ].join('\n');
+  }
+
   return `${profileContext(profile)}${asked}`;
 }
 
@@ -169,10 +229,10 @@ export function judgeSystem(boss: Boss, mode?: ModeConfig): string {
     'Weigh the answer AGAINST the dossier: reward answers that resolve a stated red flag or back a claim with the real traction; punish answers that contradict the dossier or hand-wave.',
     '',
     strictnessGuidance(mode),
-    '- critique: follow the critique guidance for this mode. Reference the company. No generic filler.',
+    '- critique: follow the critique guidance for this mode. Reference the company. End with a POINTED follow-up jab that presses on the remaining weakness. No generic filler.',
     '- followUp: 1 sentence. A pointed next question that presses on the remaining weakness, in this mode\'s tone. Raise the stakes.',
     '',
-    'Stay in character for the MODE above at all times — comedic and generous in FUN, balanced in NORMAL, surgical and stingy in EXPERT.',
+    'Stay in character for the MODE above at all times — gentle and coaching in EASY, comedic and generous in FUN, balanced in NORMAL, surgical and stingy in EXPERT.',
   ].join('\n');
 }
 
@@ -204,10 +264,10 @@ export function verdictSystem(outcome: 'funded' | 'passed', mode?: ModeConfig): 
     'You are the managing partner writing the final verdict after THE GAUNTLET — a three-investor pitch battle.',
     frame,
     modeBlock(mode),
-    'Write the verdict in the STYLE AND TONE of the MODE above (playful and generous in FUN, balanced in NORMAL, exacting in EXPERT).',
+    'Write the verdict in the STYLE AND TONE of the MODE above (warm and encouraging in EASY, playful and generous in FUN, balanced in NORMAL, exacting in EXPERT).',
     'You have the company dossier and the full transcript. Ground every line in the REAL company.',
     'Return:',
-    '- score (0-100): honest fundability calibrated to BOTH the transcript and the mode. Funded outcomes usually 55-92; passed outcomes usually 8-48. FUN mode skews more generous; EXPERT mode skews more brutal.',
+    '- score (0-100): honest fundability calibrated to BOTH the transcript and the mode. Funded outcomes usually 55-92; passed outcomes usually 8-48. EASY/FUN mode skews more generous; EXPERT mode skews more brutal.',
     '- oneLiner: a punchy 1-sentence headline verdict on the company.',
     '- investorQuote: a quotable, sharable 1-2 sentence line in the partner\'s voice — the thing you\'d say in the partner meeting.',
     '- strengths: 2-3 short bullet phrases (real, specific to this company).',

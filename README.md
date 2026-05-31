@@ -20,23 +20,49 @@ It plays like a boss-rush video game. It feels like a real pitch meeting.
 
 ---
 
-## 🕹️ Retro arcade reskin + 3 difficulty modes
+## 🕹️ Retro arcade reskin + 4 difficulty modes
 
 The whole experience is wrapped in a **pixel-retro arcade aesthetic** — a CRT
 scanline/flicker/vignette overlay (pointer-events: none, never blocks clicks), a
 readable `VT323` retro body font with `Press Start 2P` reserved for arcade buttons,
 segmented HP bars, neon accents, and crunchy **SFX** with a persistent mute toggle.
 
-Pick your fight at **three difficulty modes** — the accent color, copy, and boss
-brutality shift per mode:
+Pick your fight at **four difficulty modes** — the accent color, copy, boss
+brutality, per-question timer, and score multiplier all shift per mode:
 
-- **Fun** — gentler bosses, forgiving scoring. A warm-up lap.
+- **Easy** — gentlest bosses, a generous **90s** per-question timer, `0.5×` scoring.
+  The on-ramp for first-timers.
+- **Fun** — gentle bosses, forgiving scoring. A warm-up lap.
 - **Normal** — the real pitch drill, balanced damage.
-- **Expert** — relentless follow-ups, punishing scoring. Term sheets are earned.
+- **Expert** — relentless follow-ups, tight timer, punishing scoring. Term sheets
+  are earned.
 
 Mode drives `data-mode` on the shell (→ `--accent`), wired through `types.ts`
 (`GameApi.mode` / `setMode`), `useGame.ts`, and `constants.ts` (`MODES` /
-`DEFAULT_MODE` / `getMode()`).
+`DEFAULT_MODE` / `getMode()`). Each mode carries a `timeLimit` and `scoreMult`.
+
+---
+
+## 🏆 Score system, combos, timer & leaderboard
+
+The Gauntlet now plays for **points**, not just survival:
+
+- **Live scoring.** Every answer is scored on the quality of your defense; the
+  running **score** is shown in a `ScoreHud` alongside your **combo** counter.
+- **Combo multiplier.** String together strong answers to build a **combo** — back-to-back
+  wins stack and inflate your score; a weak answer breaks the streak.
+- **Per-question timer + speed bonus.** Each boss question runs against a countdown
+  (`Timer` component, `timeLimit` per mode). Answer fast and you earn a **speed
+  multiplier**; let it run down and the bonus bleeds away. The interval is fully
+  cleaned up on start / submit / timeout / finish / reset and on unmount — no leaks.
+- **Score multiplier per mode.** Easy halves your score (`0.5×`); harder modes pay out
+  more, so the leaderboard rewards picking a tougher fight.
+- **Persistent leaderboard.** Enter your name (`NameEntry`) and qualifying runs are
+  saved to a local **leaderboard** (`lib/leaderboard.ts`, `topN` / `ScoreEntry`),
+  rendered in the `Leaderboard` screen. Beat the board, then share the card.
+
+Scoring math lives in `lib/scoring.ts`; persistence in `lib/leaderboard.ts`; UI in
+`components/{ScoreHud,Timer,NameEntry,Leaderboard}.tsx`.
 
 ---
 

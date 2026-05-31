@@ -14,6 +14,8 @@
  *   sfx.ko()      -> defeat slam (low rumble + buzz)
  *   sfx.win()     -> victory fanfare (ascending arpeggio)
  *   sfx.lose()    -> failure sting (descending minor)
+ *   sfx.tick()    -> short high blip for the countdown's final seconds
+ *   sfx.buzz()    -> harsh low buzz for TIME OUT
  *   sfx.toggleMute(): boolean   -> flips mute, returns NEW muted state
  *   sfx.muted: boolean          -> current mute state (true = silent)
  *   sfx.setMuted(v: boolean)    -> set explicitly (e.g. restore from storage)
@@ -214,6 +216,18 @@ class RetroSfx {
         gain: 0.4,
       }),
     );
+  }
+
+  /** Countdown urgency — short high blip for the final seconds of the timer. */
+  tick(): void {
+    this.tone(1320, { type: 'square', dur: 0.05, gain: 0.34 });
+  }
+
+  /** TIME OUT — harsh low buzz (gritty sawtooth + noise crunch). */
+  buzz(): void {
+    this.tone(150, { type: 'sawtooth', dur: 0.32, gain: 0.42, to: 70 });
+    this.tone(98, { type: 'square', at: 0.02, dur: 0.34, gain: 0.36, to: 60 });
+    this.noise({ dur: 0.28, gain: 0.28 });
   }
 
   // ---- mute control -------------------------------------------------------

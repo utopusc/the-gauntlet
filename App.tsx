@@ -6,6 +6,7 @@ import { ProfileScreen } from './components/ProfileScreen';
 import { Arena } from './components/Arena';
 import { RaiseScreen } from './components/RaiseScreen';
 import { VerdictScreen } from './components/VerdictScreen';
+import { Leaderboard } from './components/Leaderboard';
 import { sfx } from './lib/sfx';
 
 const phaseTransition = {
@@ -49,6 +50,16 @@ const MuteToggle: React.FC = () => {
 
 export default function App() {
   const game = useGame();
+
+  // App owns the HIGH SCORES overlay so any screen (Onboard intro, win, lose)
+  // can open it via the onOpenLeaderboard callback. highlightId flashes the
+  // freshly-saved entry when the player just entered their name.
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const openLeaderboard = () => {
+    sfx.select();
+    setShowLeaderboard(true);
+  };
+  const closeLeaderboard = () => setShowLeaderboard(false);
 
   return (
     // data-mode drives --accent across the whole shell (.pixel-panel / .arcade-btn / .glow)
@@ -97,7 +108,7 @@ export default function App() {
         <AnimatePresence mode="wait">
           {(game.phase === 'onboard' || game.phase === 'analyzing') && (
             <motion.div key="onboard" {...phaseTransition} className="flex flex-1 flex-col">
-              <OnboardScreen game={game} />
+              <OnboardScreen game={game} onOpenLeaderboard={openLeaderboard} />
             </motion.div>
           )}
           {game.phase === 'profile' && (
@@ -112,16 +123,30 @@ export default function App() {
           )}
           {game.phase === 'win' && (
             <motion.div key="raise" {...phaseTransition} className="flex flex-1 flex-col">
-              <RaiseScreen game={game} />
+              <RaiseScreen game={game} onOpenLeaderboard={openLeaderboard} />
             </motion.div>
           )}
           {game.phase === 'lose' && (
             <motion.div key="verdict" {...phaseTransition} className="flex flex-1 flex-col">
-              <VerdictScreen game={game} />
+              <VerdictScreen game={game} onOpenLeaderboard={openLeaderboard} />
             </motion.div>
           )}
         </AnimatePresence>
       </div>
+
+      {/* HIGH SCORES overlay — App-owned, openable from any screen. Highlights
+          the entry the player just saved (game.lastEntry) when present.
+          Leaderboard renders its own full-screen overlay, so we mount it only
+          while open (it has no `open` prop — presence === visible). */}
+      <AnimatePresence>
+        {showLeaderboard && (
+          <Leaderboard
+            key="leaderboard"
+            onClose={closeLeaderboard}
+            highlightId={game.lastEntry?.id}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

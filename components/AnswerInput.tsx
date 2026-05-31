@@ -44,7 +44,10 @@ export function AnswerInput({ onSubmit, disabled }: AnswerInputProps) {
 
   return (
     <div className="w-full">
-      <div className={`pixel-panel scanline p-3 ${disabled ? 'opacity-70' : ''}`}>
+      <div
+        className={`pixel-panel scanline p-3 ${disabled ? 'opacity-70' : ''}`}
+        aria-busy={disabled}
+      >
         {/* terminal prompt line */}
         <div className="mb-1 flex items-center gap-2">
           <span className="font-pixel text-[8px]" style={{ color: 'var(--accent)' }}>
@@ -64,7 +67,9 @@ export function AnswerInput({ onSubmit, disabled }: AnswerInputProps) {
               ? 'THINKING...'
               : 'Defend your idea. Be specific — vague answers cost you credibility.'
           }
-          className="w-full resize-none bg-transparent px-1 py-1 text-lg text-neonInk outline-none placeholder:text-neonInk/30 sm:text-xl"
+          className={`w-full resize-none bg-transparent px-1 py-1 text-lg text-neonInk outline-none placeholder:text-neonInk/30 sm:text-xl ${
+            disabled ? 'cursor-not-allowed' : ''
+          }`}
           style={{ border: 'none', boxShadow: 'none' }}
         />
 

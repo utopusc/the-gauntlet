@@ -5,6 +5,12 @@ import type { Verdict } from '../types';
 interface ShareCardProps {
   verdict: Verdict;
   idea: string;
+  /** The run's arcade FINAL SCORE (points). When present, the card shows it. */
+  finalScore?: number;
+  /** Best combo reached this run (decorates the FINAL SCORE strip). */
+  bestCombo?: number;
+  /** Arcade RANK letter for the final score (S/A/B/C/D). */
+  rank?: string;
 }
 
 /* ---------------------------------------------------------------------------
@@ -81,9 +87,16 @@ const HighScore: React.FC<{ score: number; theme: ReturnType<typeof scoreTheme> 
   );
 };
 
-export const ShareCard: React.FC<ShareCardProps> = ({ verdict, idea }) => {
+export const ShareCard: React.FC<ShareCardProps> = ({
+  verdict,
+  idea,
+  finalScore,
+  bestCombo,
+  rank,
+}) => {
   const theme = scoreTheme(verdict.score);
   const funded = verdict.outcome === 'funded';
+  const hasFinalScore = typeof finalScore === 'number' && Number.isFinite(finalScore);
 
   return (
     <motion.div
@@ -125,6 +138,37 @@ export const ShareCard: React.FC<ShareCardProps> = ({ verdict, idea }) => {
           </h2>
         </div>
       </div>
+
+      {/* FINAL SCORE + rank strip (arcade run total — shown when provided) */}
+      {hasFinalScore && (
+        <div
+          className="relative mt-6 flex items-center justify-between border-[3px] px-4 py-3"
+          style={{ borderColor: theme.accent }}
+        >
+          <div className="flex flex-col">
+            <span className="font-pixel text-[8px] tracking-[0.25em] text-neonInk/45">
+              FINAL SCORE
+            </span>
+            <span className={`font-pixel text-2xl tabular-nums ${theme.text} ${theme.glowClass} sm:text-3xl`}>
+              {Math.max(0, Math.round(finalScore as number)).toLocaleString()}
+            </span>
+            {typeof bestCombo === 'number' && bestCombo > 0 && (
+              <span className="font-pixel mt-1 text-[8px] tracking-[0.2em] text-neonInk/45">
+                BEST COMBO ×{bestCombo}
+              </span>
+            )}
+          </div>
+          {rank && (
+            <div
+              className={`font-pixel grid h-14 w-14 shrink-0 place-items-center border-[3px] text-2xl ${theme.text} ${theme.glowClass}`}
+              style={{ borderColor: theme.accent }}
+              aria-label={`Rank ${rank}`}
+            >
+              {rank}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* the pitch */}
       <div className="relative mt-6 border-[3px] border-black bg-black/50 px-4 py-3">

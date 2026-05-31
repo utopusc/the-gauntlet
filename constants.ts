@@ -15,11 +15,30 @@ export const MAX_ROUNDS_PER_BOSS = 3;
 // ---- game modes -----------------------------------------------------------
 
 /**
- * The three difficulty / tone modes, chosen on the Onboard screen before the fight.
+ * The four difficulty / tone modes, chosen on the Onboard screen before the fight.
  * `vibe` is injected verbatim into every battle prompt (question / judge / verdict),
  * and the numeric knobs scale the arena math. NORMAL is the original, balanced behavior.
+ * `timeLimit` (seconds/question) drives the arena countdown; `scoreMult` rewards harder modes.
  */
 export const MODES: ModeConfig[] = [
+  {
+    id: 'easy',
+    label: 'EASY',
+    tagline: 'Coaching mode. Gentle, encouraging, you got this.',
+    emoji: '🌱',
+    accent: '#22c55e', // green
+    bossHpMult: 0.6, // very squishy bosses
+    founderHpMult: 1.6, // huge cushion — hard to lose
+    selfDamageMult: 0.4, // mistakes barely register
+    rounds: 2, // short and friendly
+    strictness: 'lenient',
+    timeLimit: 90, // long, relaxed clock
+    scoreMult: 0.5, // easy points are worth less
+    vibe:
+      'Ask GENTLE, coaching, encouraging questions that TEACH the founder about THIS exact company. ' +
+      'Be a warm, supportive mentor: softball-but-real questions that build confidence, point at the right things to think about, ' +
+      'and gently nudge toward stronger answers. Always kind and reassuring — celebrate good instincts, never intimidate.',
+  },
   {
     id: 'fun',
     label: 'FUN',
@@ -31,6 +50,8 @@ export const MODES: ModeConfig[] = [
     selfDamageMult: 0.6, // bad answers barely sting
     rounds: 2, // shorter rounds, more laughs
     strictness: 'lenient',
+    timeLimit: 50,
+    scoreMult: 0.8,
     vibe:
       'Ask WILD, absurd, meme-y curveball questions that are still about THIS exact company but completely unhinged — ' +
       'think late-night-arcade chaos energy, surreal hypotheticals, and ridiculous what-ifs. Keep it comedic and playful, ' +
@@ -47,6 +68,8 @@ export const MODES: ModeConfig[] = [
     selfDamageMult: 1.0,
     rounds: 3,
     strictness: 'fair',
+    timeLimit: 60,
+    scoreMult: 1.0,
     vibe:
       'Ask realistic, sharp, fair VC questions that target the real weak points of THIS company. ' +
       'Be a credible top-tier investor: confident, fun, a little intimidating, but always grounded in real fundraising objections. ' +
@@ -63,6 +86,8 @@ export const MODES: ModeConfig[] = [
     selfDamageMult: 1.5, // mistakes are punished hard
     rounds: 3,
     strictness: 'harsh',
+    timeLimit: 30, // brutal clock
+    scoreMult: 2.0, // double points for surviving
     vibe:
       'Ask BRUTAL, deeply technical, rapid-fire questions that go straight for the jugular of THIS company. ' +
       'No softballs — interrogate the hardest assumptions, the unit economics, the defensibility, the data, the moat. ' +
@@ -74,10 +99,42 @@ export const MODES: ModeConfig[] = [
 /** Default mode used when nothing is selected. Keeps the original balanced feel. */
 export const DEFAULT_MODE: GameMode = 'normal';
 
+/** Stable display order for the mode selector cards. */
+export const MODE_ORDER: GameMode[] = ['easy', 'fun', 'normal', 'expert'];
+
 /** Lookup a ModeConfig by id, falling back to NORMAL so callers never get undefined. */
 export function getMode(id: GameMode | undefined | null): ModeConfig {
   return MODES.find((m) => m.id === id) ?? MODES.find((m) => m.id === DEFAULT_MODE)!;
 }
+
+// ---- scoring --------------------------------------------------------------
+
+/** Base points by answer rating (before speed / combo / mode multipliers). */
+export const RATING_POINTS = { weak: 50, solid: 150, killer: 400 } as const;
+
+/**
+ * Speed tiers, checked top-to-bottom. `minFrac` = timeLeft / timeLimit at submit
+ * (1.0 = answered instantly, 0 = ran the clock out). First tier whose threshold
+ * the fraction meets wins.
+ */
+export const SPEED_TIERS = [
+  { minFrac: 0.66, mult: 2.0, label: 'FAST' },
+  { minFrac: 0.33, mult: 1.5, label: 'QUICK' },
+  { minFrac: 0, mult: 1.0, label: 'OK' },
+] as const;
+
+/** Timed out = no points + combo reset + founder takes self-damage. */
+export const TIMEOUT_MULT = 0;
+/** comboMult = 1 + COMBO_STEP * currentStreak (streak of solid/killer answers). */
+export const COMBO_STEP = 0.25;
+/** Flat bonus for surviving the gauntlet (mode-multiplied). */
+export const WIN_BONUS = 2000;
+/** Extra bonus for a funded run where the founder took zero self-damage. */
+export const PERFECT_BONUS = 1500;
+/** Bonus per point of remaining founder HP at the end (mode-multiplied). */
+export const HP_BONUS_PER = 10;
+
+// ---- bosses ---------------------------------------------------------------
 
 /**
  * The three bosses map 1:1 to the hackathon judging criteria:

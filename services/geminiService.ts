@@ -34,6 +34,7 @@ import {
   verdictUser,
   investorMatchSystem,
   investorMatchUser,
+  type QAHistoryItem,
 } from '../prompts';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -229,30 +230,46 @@ export async function analyzeCompany(input: CompanyInput): Promise<CompanyProfil
 
 // ---- boss question --------------------------------------------------------
 
+/**
+ * Generate the next boss question.
+ *
+ * When `history` (the per-boss Q/A/J exchange so far) is NON-EMPTY, the prompt
+ * produces a genuine FOLLOW-UP that drills the weakest point of the founder's LAST
+ * answer, quotes their words, escalates, and never repeats. When empty, it's the
+ * boss's opening question. Always honors the active mode's vibe + strictness +
+ * the boss's focus. `askedSoFar` is the list of already-asked questions (forbid repeats).
+ */
 export async function generateBossQuestion(
   profile: CompanyProfile,
   boss: Boss,
-  askedSoFar: string[],
-  mode?: ModeConfig,
+  mode: ModeConfig,
+  history: QAHistoryItem[] = [],
+  askedSoFar: string[] = [],
 ): Promise<string> {
+  const isFollowUp = history.length > 0;
+  // Default the forbidden list from history when not provided explicitly.
+  const asked = askedSoFar.length ? askedSoFar : history.map((h) => h.question).filter(Boolean);
+
   try {
     const res = await ai.models.generateContent({
       model: MODEL,
-      contents: bossQuestionUser(profile, askedSoFar),
+      contents: bossQuestionUser(profile, asked, history),
       config: {
-        systemInstruction: bossQuestionSystem(boss, mode),
+        systemInstruction: bossQuestionSystem(boss, mode, isFollowUp),
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
           properties: {
             question: {
               type: Type.STRING,
-              description: 'One brutal, company-specific VC question. 1-2 sentences.',
+              description: isFollowUp
+                ? 'One sharper FOLLOW-UP question that drills the weakest part of the founder\'s last answer. 1-2 sentences.'
+                : 'One brutal, company-specific VC question. 1-2 sentences.',
             },
           },
           required: ['question'],
         },
-        temperature: 0.9,
+        temperature: isFollowUp ? 0.95 : 0.9,
       },
     });
     const parsed = extractJson<{ question?: string }>(res.text);
@@ -262,6 +279,9 @@ export async function generateBossQuestion(
   } catch (err) {
     console.error('[gauntlet] generateBossQuestion failed:', err);
     // Persona + company-flavored fallback so the demo keeps moving.
+    if (isFollowUp) {
+      return `You glossed over the hard part there. Be specific: what is the one number that proves ${profile.name} actually works?`;
+    }
     return `On ${boss.focus} — walk me through exactly why ${profile.name} wins here. Specifics, not vision.`;
   }
 }
@@ -271,9 +291,9 @@ export async function generateBossQuestion(
 export async function judgeAnswer(
   profile: CompanyProfile,
   boss: Boss,
+  mode: ModeConfig,
   question: string,
   answer: string,
-  mode?: ModeConfig,
 ): Promise<JudgeResult> {
   try {
     const res = await ai.models.generateContent({
@@ -287,7 +307,7 @@ export async function judgeAnswer(
           properties: {
             damage: { type: Type.NUMBER, description: "Damage to the investor's skepticism HP. 0-100." },
             selfDamage: { type: Type.NUMBER, description: "Damage to the founder's own credibility. 0-40." },
-            critique: { type: Type.STRING, description: 'Sharp, specific 1-2 sentence critique.' },
+            critique: { type: Type.STRING, description: 'Sharp, specific 1-2 sentence critique ending with a pointed follow-up jab.' },
             rating: { type: Type.STRING, enum: ['weak', 'solid', 'killer'] },
             followUp: { type: Type.STRING, description: 'A pointed 1-sentence follow-up that raises the stakes.' },
           },
@@ -330,7 +350,7 @@ export async function generateVerdict(
   profile: CompanyProfile,
   transcript: string,
   outcome: 'funded' | 'passed',
-  mode?: ModeConfig,
+  mode: ModeConfig,
 ): Promise<Verdict> {
   try {
     const res = await ai.models.generateContent({

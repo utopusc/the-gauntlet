@@ -2,13 +2,115 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import type { GameApi, InvestorMatch, Verdict } from '../types';
 import { ShareCard } from './ShareCard';
+import { NameEntry } from './NameEntry';
 import { Button } from './ui/Button';
 import { buildShareText, shareToX, shareToLinkedIn } from '../lib/share';
 import { sfx } from '../lib/sfx';
 
 interface RaiseScreenProps {
   game: GameApi;
+  /** Open the App-owned HIGH SCORES (leaderboard) overlay. */
+  onOpenLeaderboard: () => void;
 }
+
+/** Map a final score to an arcade RANK letter. */
+function rankFor(score: number): { rank: string; color: string } {
+  if (score >= 8000) return { rank: 'S', color: 'var(--neon-cyan)' };
+  if (score >= 5000) return { rank: 'A', color: 'var(--neon-green)' };
+  if (score >= 3000) return { rank: 'B', color: 'var(--neon-violet)' };
+  if (score >= 1500) return { rank: 'C', color: 'var(--neon-amber)' };
+  return { rank: 'D', color: 'var(--neon-amber)' };
+}
+
+/* ---------------------------------------------------------------------------
+ * FINAL SCORE board — the big arcade run total + per-component breakdown + rank.
+ * Counts up on mount; reads game.score / game.scoreBreakdown / game.bestCombo.
+ * ------------------------------------------------------------------------- */
+const FinalScore: React.FC<{ game: GameApi }> = ({ game }) => {
+  const total = Math.max(0, Math.round(game.score));
+  const bd = game.scoreBreakdown;
+  const { rank, color } = rankFor(total);
+  const [shown, setShown] = useState(0);
+
+  useEffect(() => {
+    let raf = 0;
+    const start = performance.now();
+    const dur = 1200;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / dur);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setShown(Math.round(eased * total));
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [total]);
+
+  const rows: Array<{ label: string; value: number | string }> = bd
+    ? [
+        { label: 'BASE', value: bd.base.toLocaleString() },
+        { label: 'SPEED', value: `+${bd.speed.toLocaleString()}` },
+        { label: 'COMBO', value: `+${bd.combo.toLocaleString()}` },
+        { label: 'BONUS', value: `+${bd.bonuses.toLocaleString()}` },
+      ]
+    : [];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 18, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+      className="pixel-panel scanline flex w-full max-w-3xl flex-col gap-6 p-6 sm:p-8"
+      style={{ ['--accent' as any]: color }}
+    >
+      <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center sm:justify-between sm:gap-8">
+        {/* big total */}
+        <div className="flex flex-col items-center sm:items-start">
+          <span className="font-pixel text-[9px] tracking-[0.3em] text-neonInk/55">
+            FINAL SCORE
+          </span>
+          <span
+            className="font-pixel glow text-5xl tabular-nums leading-none sm:text-7xl"
+            style={{ color }}
+          >
+            {shown.toLocaleString()}
+          </span>
+          <span className="font-pixel mt-2 text-[8px] tracking-[0.25em] text-neonInk/45">
+            BEST COMBO ×{game.bestCombo}
+          </span>
+        </div>
+
+        {/* rank badge */}
+        <motion.div
+          initial={{ scale: 1.6, opacity: 0, rotate: -8 }}
+          animate={{ scale: 1, opacity: 1, rotate: -4 }}
+          transition={{ delay: 0.35, type: 'spring', stiffness: 200, damping: 12 }}
+          className="font-pixel glow grid h-24 w-24 shrink-0 place-items-center border-[3px] text-5xl"
+          style={{ color, borderColor: color, boxShadow: `0 0 18px ${color}` }}
+          aria-label={`Rank ${rank}`}
+        >
+          {rank}
+        </motion.div>
+      </div>
+
+      {/* breakdown rows */}
+      {rows.length > 0 && (
+        <div className="grid grid-cols-2 gap-x-6 gap-y-2 border-t-[3px] border-black pt-4 sm:grid-cols-4">
+          {rows.map((r) => (
+            <div key={r.label} className="flex flex-col items-center gap-1">
+              <span className="font-pixel text-[8px] tracking-[0.2em] text-neonInk/45">
+                {r.label}
+              </span>
+              <span className="font-pixel tabular-nums text-sm text-neonInk">
+                {r.value}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </motion.div>
+  );
+};
 
 /* ---------------------------------------------------------------------------
  * Fundability high-score — arcade scoreboard counting up to the verdict score.
@@ -193,13 +295,23 @@ const MatchingLoader: React.FC = () => (
 /* ===========================================================================
  * RaiseScreen — the WIN payoff: arcade YOU WIN + $5M raise + investor shortlist.
  * ========================================================================= */
-export const RaiseScreen: React.FC<RaiseScreenProps> = ({ game }) => {
+export const RaiseScreen: React.FC<RaiseScreenProps> = ({ game, onOpenLeaderboard }) => {
   const { verdict, companyProfile, investors, matching, reset } = game;
+
+  // Track whether the player has saved their high-score this run (drives the
+  // swap from <NameEntry> to the VIEW LEADERBOARD reveal). lastEntry persists
+  // across the screen lifetime in the hook, so seed from it too.
+  const [saved, setSaved] = useState<boolean>(Boolean(game.lastEntry));
 
   // Victory fanfare on mount.
   useEffect(() => {
     sfx.win();
   }, []);
+
+  const handleSave = (name: string) => {
+    game.saveScore(name);
+    setSaved(true);
+  };
 
   const companyName = companyProfile?.name?.trim() || 'Your company';
   const pitch =
@@ -253,6 +365,32 @@ export const RaiseScreen: React.FC<RaiseScreenProps> = ({ game }) => {
           your high score and a matched shortlist of funds in the room.
         </p>
       </motion.div>
+
+      {/* ---- FINAL SCORE board (total + breakdown + rank) ---- */}
+      <FinalScore game={game} />
+
+      {/* ---- high-score save / leaderboard ---- */}
+      <div className="flex w-full max-w-xl flex-col items-center gap-4">
+        {game.qualifies && !saved ? (
+          <NameEntry onSubmit={handleSave} />
+        ) : saved ? (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="pixel-panel scanline flex w-full flex-col items-center gap-3 p-5 text-center"
+            style={{ ['--accent' as any]: 'var(--neon-green)' }}
+          >
+            <p className="font-pixel text-[10px] tracking-[0.2em] text-neonGreen glow">
+              <span style={{ ['--accent' as any]: 'var(--neon-green)' }}>
+                ★ SCORE SAVED — YOU MADE THE BOARD
+              </span>
+            </p>
+            <Button variant="primary" size="md" glow className="w-full" onClick={onOpenLeaderboard}>
+              🏆 VIEW LEADERBOARD
+            </Button>
+          </motion.div>
+        ) : null}
+      </div>
 
       {/* ---- high-score + verdict line ---- */}
       <motion.div
@@ -310,7 +448,13 @@ export const RaiseScreen: React.FC<RaiseScreenProps> = ({ game }) => {
 
       {/* ---- shareable high-score card + actions ---- */}
       <div className="flex w-full flex-col items-center gap-6">
-        <ShareCard verdict={verdictForShare} idea={pitch} />
+        <ShareCard
+          verdict={verdictForShare}
+          idea={pitch}
+          finalScore={game.score}
+          bestCombo={game.bestCombo}
+          rank={rankFor(Math.max(0, Math.round(game.score))).rank}
+        />
 
         <motion.div
           initial={{ opacity: 0, y: 16 }}
@@ -326,6 +470,9 @@ export const RaiseScreen: React.FC<RaiseScreenProps> = ({ game }) => {
               <span aria-hidden>in</span> POST ON LINKEDIN
             </Button>
           </div>
+          <Button variant="outline" size="md" className="w-full" onClick={onOpenLeaderboard}>
+            🏆 LEADERBOARD
+          </Button>
           <Button variant="primary" size="lg" glow className="w-full" onClick={reset}>
             ⚔ PLAY AGAIN
           </Button>
