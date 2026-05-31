@@ -169,61 +169,62 @@ export async function analyzeCompany(input: CompanyInput): Promise<CompanyProfil
       });
     }
 
-    // Config: when a URL is present we MUST use the urlContext tool and therefore
-    // CANNOT pass responseSchema (Gemini rejects the combination). For PDF/idea
-    // only, we can safely lock the output with a responseSchema.
-    const config: any = {
-      systemInstruction: analysisSystem(),
-      temperature: 0.4,
+    // Strict JSON schema (reused by the reliable, free-tier-safe path).
+    const responseSchema = {
+      type: Type.OBJECT,
+      properties: {
+        name: { type: Type.STRING },
+        tagline: { type: Type.STRING },
+        problem: { type: Type.STRING },
+        solution: { type: Type.STRING },
+        market: { type: Type.STRING },
+        traction: { type: Type.STRING },
+        team: { type: Type.STRING },
+        businessModel: { type: Type.STRING },
+        askAmount: { type: Type.STRING },
+        signals: { type: Type.ARRAY, items: { type: Type.STRING } },
+        redFlags: { type: Type.ARRAY, items: { type: Type.STRING } },
+        sourceNote: { type: Type.STRING },
+      },
+      required: [
+        'name', 'tagline', 'problem', 'solution', 'market', 'traction',
+        'team', 'businessModel', 'askAmount', 'signals', 'redFlags', 'sourceNote',
+      ],
     };
 
+    // The URL is embedded in the instruction text (analysisUser) AND reinforced here,
+    // so even the no-tool path "knows" the company by name/domain. This is what keeps
+    // analysis working on AI Studio's free-tier key, where the urlContext tool is
+    // billing-gated and returns 403 ("permission denied").
     if (url) {
-      config.tools = [{ urlContext: {} }];
-      // No responseMimeType / responseSchema here — prompt enforces raw JSON.
-    } else {
-      config.responseMimeType = 'application/json';
-      config.responseSchema = {
-        type: Type.OBJECT,
-        properties: {
-          name: { type: Type.STRING },
-          tagline: { type: Type.STRING },
-          problem: { type: Type.STRING },
-          solution: { type: Type.STRING },
-          market: { type: Type.STRING },
-          traction: { type: Type.STRING },
-          team: { type: Type.STRING },
-          businessModel: { type: Type.STRING },
-          askAmount: { type: Type.STRING },
-          signals: { type: Type.ARRAY, items: { type: Type.STRING } },
-          redFlags: { type: Type.ARRAY, items: { type: Type.STRING } },
-          sourceNote: { type: Type.STRING },
-        },
-        required: [
-          'name', 'tagline', 'problem', 'solution', 'market', 'traction',
-          'team', 'businessModel', 'askAmount', 'signals', 'redFlags', 'sourceNote',
-        ],
-      };
+      parts.push({ text: `\nCompany website: ${url}\nIf you recognize this company, use what you know about it; otherwise infer from the domain and any description above.` });
     }
 
+    // Attempt 1 (best-effort, richer): live website reading via the urlContext tool.
+    // Requires a billing-enabled key. On ANY failure (403 permission / 429 quota) we
+    // silently fall through to the free-tier-safe path below — the user never sees an error.
+    if (url) {
+      try {
+        const res = await ai.models.generateContent({
+          model: MODEL,
+          contents: [{ role: 'user', parts }],
+          config: { systemInstruction: analysisSystem(), temperature: 0.4, tools: [{ urlContext: {} }] },
+        });
+        return normalizeProfile(extractJson<Partial<CompanyProfile>>(res.text), input);
+      } catch (toolErr) {
+        console.warn('[gauntlet] urlContext unavailable (likely free-tier key) — using knowledge-based analysis.');
+      }
+    }
+
+    // Attempt 2 (reliable, free-tier safe): strict JSON mode, no tools. Works with ANY valid key.
     const res = await ai.models.generateContent({
       model: MODEL,
       contents: [{ role: 'user', parts }],
-      config,
+      config: { systemInstruction: analysisSystem(), temperature: 0.4, responseMimeType: 'application/json', responseSchema },
     });
-
-    const parsed = extractJson<Partial<CompanyProfile>>(res.text);
-    return normalizeProfile(parsed, input);
+    return normalizeProfile(extractJson<Partial<CompanyProfile>>(res.text), input);
   } catch (err) {
     console.error('[gauntlet] analyzeCompany failed:', err);
-    // Last-ditch: if the URL path failed (often the tool+schema combo), retry once
-    // PDF/idea-only with a strict schema so a deck upload still yields a real profile.
-    if (url && (hasPdf || idea)) {
-      try {
-        return await analyzeCompany({ ...input, url: undefined });
-      } catch (retryErr) {
-        console.error('[gauntlet] analyzeCompany retry (no-url) failed:', retryErr);
-      }
-    }
     return fallbackProfile(input);
   }
 }
